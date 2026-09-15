@@ -159,7 +159,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     ),
                   ),
 
-                // Estado actual
                 if (document.status == DocumentStatus.uploaded)
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -176,7 +175,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         const SizedBox(width: 8),
                         Text(
                           'Ya está en el sistema',
-                          style: TextStyle(color: Colors.green.shade300, fontWeight: FontWeight.w600, fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.green.shade300,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
@@ -207,7 +210,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                                 : 'Subir al sistema',
                         color: document.status == DocumentStatus.uploaded
                             ? Colors.green.shade400
-                            : Colors.emerald.shade400,
+                            : const Color(0xFF34D399),
                         isLoading: isUploading,
                         onTap: _uploadToSystem,
                       ),

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:intl/intl.dart';
@@ -384,7 +385,6 @@ class _DocumentCard extends StatelessWidget {
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(11),
                       child: Image.file(
-                        // ignore: prefer_const_constructors
                         File(document.imagePaths.first),
                         fit: BoxFit.cover,
                       ),
@@ -443,6 +443,3 @@ class _DocumentCard extends StatelessWidget {
     );
   }
 }
-
-// Necesario para Image.file
-import 'dart:io';
