@@ -15,7 +15,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  final DocumentService _documentService = LocalDocumentService();
+  final DocumentService _service = LocalDocumentService();
   List<ScannedDocument> documents = [];
   bool isScanning = false;
   bool isLoading = true;
@@ -32,11 +32,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _loadDocuments() async {
-    final docs = await _documentService.getAllDocuments();
-    setState(() {
-      documents = docs;
-      isLoading = false;
-    });
+    final docs = await _service.getAllDocuments();
+    if (mounted) {
+      setState(() {
+        documents = docs;
+        isLoading = false;
+      });
+    }
   }
 
   @override
@@ -73,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           createdAt: now,
         );
 
-        await _documentService.saveDocument(newDoc);
+        await _service.saveDocument(newDoc);
 
         setState(() {
           documents.insert(0, newDoc);
@@ -81,24 +83,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         });
 
         if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PreviewScreen(
-                document: newDoc,
-                documentService: _documentService,
-                onUpdated: (updated) {
-                  setState(() {
-                    final index = documents.indexWhere((d) => d.id == updated.id);
-                    if (index != -1) documents[index] = updated;
-                  });
-                },
-                onDeleted: () {
-                  setState(() => documents.removeWhere((d) => d.id == newDoc.id));
-                },
-              ),
-            ),
-          );
+          _openPreview(newDoc);
         }
       } else {
         setState(() => isScanning = false);
@@ -109,6 +94,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _showSnack('Error al escanear: $e', isError: true);
       }
     }
+  }
+
+  void _openPreview(ScannedDocument doc) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PreviewScreen(
+          document: doc,
+          documentService: _service,
+          onUpdated: (updated) {
+            setState(() {
+              final i = documents.indexWhere((d) => d.id == updated.id);
+              if (i != -1) documents[i] = updated;
+            });
+          },
+          onDeleted: () {
+            setState(() => documents.removeWhere((d) => d.id == doc.id));
+          },
+        ),
+      ),
+    );
   }
 
   void _showSnack(String message, {bool isError = false}) {
@@ -127,195 +133,178 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: [
-            // HEADER
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
-              child: Row(
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'DocScan Pro',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.grey.shade900,
-                          letterSpacing: -0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Listo para conectar con tu sistema',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade500,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      onPressed: () {},
-                      icon: Icon(Icons.settings_outlined, color: Colors.grey.shade700),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // BOTÓN DE ESCANEO
-            Expanded(
-              flex: documents.isEmpty ? 4 : 2,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ScaleTransition(
-                      scale: Tween(begin: 1.0, end: 1.06).animate(
-                        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-                      ),
-                      child: GestureDetector(
-                        onTap: isScanning ? null : startScan,
-                        child: Container(
-                          width: 168,
-                          height: 168,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF3B82F6).withOpacity(0.4),
-                                blurRadius: 36,
-                                offset: const Offset(0, 16),
+                  // HEADER
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
+                    child: Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DocScan Pro',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.grey.shade900,
+                                letterSpacing: -0.8,
                               ),
-                            ],
-                          ),
-                          child: isScanning
-                              ? const Center(
-                                  child: SizedBox(
-                                    width: 44,
-                                    height: 44,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 3.5,
-                                    ),
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.document_scanner_rounded,
-                                  size: 68,
-                                  color: Colors.white,
-                                ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Listo para PostgreSQL + API',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade500,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                        const Spacer(),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            onPressed: () {},
+                            icon: Icon(Icons.settings_outlined, color: Colors.grey.shade700),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 28),
-                    Text(
-                      isScanning ? 'Escaneando...' : 'Toca para escanear',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Documentos • Recibos • Contratos • Identificaciones',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
 
-            // LISTA DE DOCUMENTOS
-            if (documents.isNotEmpty)
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                      child: Row(
+                  // BOTÓN DE ESCANEO
+                  Expanded(
+                    flex: documents.isEmpty ? 5 : 2,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
+                          ScaleTransition(
+                            scale: Tween(begin: 1.0, end: 1.06).animate(
+                              CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+                            ),
+                            child: GestureDetector(
+                              onTap: isScanning ? null : startScan,
+                              child: Container(
+                                width: 168,
+                                height: 168,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF3B82F6).withOpacity(0.4),
+                                      blurRadius: 36,
+                                      offset: const Offset(0, 16),
+                                    ),
+                                  ],
+                                ),
+                                child: isScanning
+                                    ? const Center(
+                                        child: SizedBox(
+                                          width: 44,
+                                          height: 44,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 3.5,
+                                          ),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.document_scanner_rounded,
+                                        size: 68,
+                                        color: Colors.white,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
                           Text(
-                            'Mis documentos',
+                            isScanning ? 'Escaneando...' : 'Toca para escanear',
                             style: TextStyle(
-                              fontSize: 17,
+                              fontSize: 19,
                               fontWeight: FontWeight.w700,
                               color: Colors.grey.shade800,
                             ),
                           ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(20),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Documentos • Recibos • Contratos • IDs',
+                            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // LISTA
+                  if (documents.isNotEmpty)
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Mis documentos',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade800,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    '${documents.length}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: Text(
-                              '${documents.length}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.blue.shade700,
-                              ),
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                              itemCount: documents.length,
+                              itemBuilder: (context, index) {
+                                final doc = documents[index];
+                                return _DocumentCard(
+                                  document: doc,
+                                  onTap: () => _openPreview(doc),
+                                );
+                              },
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-                        itemCount: documents.length,
-                        itemBuilder: (context, index) {
-                          final doc = documents[index];
-                          return _DocumentCard(
-                            document: doc,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PreviewScreen(
-                                    document: doc,
-                                    documentService: _documentService,
-                                    onUpdated: (updated) {
-                                      setState(() {
-                                        final i = documents.indexWhere((d) => d.id == updated.id);
-                                        if (i != -1) documents[i] = updated;
-                                      });
-                                    },
-                                    onDeleted: () {
-                                      setState(() => documents.removeWhere((d) => d.id == doc.id));
-                                    },
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }
@@ -387,6 +376,10 @@ class _DocumentCard extends StatelessWidget {
                       child: Image.file(
                         File(document.imagePaths.first),
                         fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.grey.shade400,
+                        ),
                       ),
                     )
                   : Icon(Icons.picture_as_pdf_rounded, color: Colors.red.shade400, size: 30),

@@ -5,8 +5,8 @@ class ScannedDocument {
   final String? pdfPath;
   final DateTime createdAt;
   final DocumentStatus status;
-  final String? remoteId; // ID que devolverá el sistema cuando se suba
-  final String? uploadedAt;
+  final String? remoteId; // ID del sistema (PostgreSQL) cuando se suba
+  final DateTime? uploadedAt;
 
   ScannedDocument({
     required this.id,
@@ -25,7 +25,7 @@ class ScannedDocument {
     String? pdfPath,
     DocumentStatus? status,
     String? remoteId,
-    String? uploadedAt,
+    DateTime? uploadedAt,
   }) {
     return ScannedDocument(
       id: id,
@@ -47,22 +47,24 @@ class ScannedDocument {
         'createdAt': createdAt.toIso8601String(),
         'status': status.name,
         'remoteId': remoteId,
-        'uploadedAt': uploadedAt,
+        'uploadedAt': uploadedAt?.toIso8601String(),
       };
 
   factory ScannedDocument.fromJson(Map<String, dynamic> json) {
     return ScannedDocument(
-      id: json['id'],
-      title: json['title'],
+      id: json['id'] as String,
+      title: json['title'] as String,
       imagePaths: List<String>.from(json['imagePaths'] ?? []),
-      pdfPath: json['pdfPath'],
-      createdAt: DateTime.parse(json['createdAt']),
+      pdfPath: json['pdfPath'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
       status: DocumentStatus.values.firstWhere(
         (e) => e.name == json['status'],
         orElse: () => DocumentStatus.local,
       ),
-      remoteId: json['remoteId'],
-      uploadedAt: json['uploadedAt'],
+      remoteId: json['remoteId'] as String?,
+      uploadedAt: json['uploadedAt'] != null
+          ? DateTime.parse(json['uploadedAt'] as String)
+          : null,
     );
   }
 }
@@ -70,6 +72,6 @@ class ScannedDocument {
 enum DocumentStatus {
   local, // Solo en el celular
   uploading, // Subiendo al sistema
-  uploaded, // Ya está en el sistema
+  uploaded, // Ya está en PostgreSQL
   error, // Falló la subida
 }

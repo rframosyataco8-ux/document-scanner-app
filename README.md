@@ -1,16 +1,17 @@
 # DocScan Pro
 
-App profesional de escaneo de documentos · Lista para integrarse con cualquier sistema.
+App profesional de escaneo de documentos.
+Lista para conectarse a **PostgreSQL + API**.
 
-## Arquitectura
+## Arquitectura actual
 
 ```
 lib/
 ├── main.dart
 ├── models/
-│   └── scanned_document.dart     # Modelo del documento + estados
+│   └── scanned_document.dart
 ├── services/
-│   └── document_service.dart     # Capa de servicio (fácil de conectar a API)
+│   └── document_service.dart   ← aquí se conectará la API real
 └── screens/
     ├── home_screen.dart
     └── preview_screen.dart
@@ -22,11 +23,11 @@ lib/
 - Multi-página + PDF + JPEG
 - Vista previa con zoom
 - Compartir documentos
-- **Botón "Subir al sistema"** (simulado, listo para API real)
-- Estados del documento: Local → Subiendo → En el sistema
-- Arquitectura limpia y escalable
+- Persistencia local (los documentos no se pierden)
+- Botón **"Subir al sistema"** (simulado, listo para API real)
+- Estados: Local → Subiendo → En el sistema
 
-## Cómo actualizar y probar
+## Cómo actualizar
 
 ```bash
 git pull
@@ -34,9 +35,14 @@ flutter pub get
 flutter run          # en celular Android
 ```
 
-## Próximo paso: Conectar con el sistema
+## Próximo paso
 
-Solo hay que crear una clase `ApiDocumentService` que implemente `DocumentService` y haga las llamadas HTTP reales. El resto de la app no cambia.
+Cuando quieras conectar PostgreSQL:
+1. Creamos el backend (Node/Nest o Laravel)
+2. Creamos las tablas en PostgreSQL
+3. Reemplazamos `LocalDocumentService` por `ApiDocumentService`
+
+La app Flutter casi no cambia.
 
 ---
 

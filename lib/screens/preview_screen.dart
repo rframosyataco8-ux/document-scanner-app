@@ -63,7 +63,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('¡Documento subido al sistema correctamente!'),
+            content: const Text('¡Documento subido al sistema!'),
             backgroundColor: Colors.green.shade700,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -92,9 +92,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
           TextButton(
             onPressed: () async {
               await widget.documentService.deleteDocument(document.id);
-              Navigator.pop(ctx);
+              if (ctx.mounted) Navigator.pop(ctx);
               widget.onDeleted();
-              Navigator.pop(context);
+              if (mounted) Navigator.pop(context);
             },
             child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
           ),
@@ -111,7 +111,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: Text(document.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        title: Text(
+          document.title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
         actions: [
           IconButton(
             onPressed: _confirmDelete,
@@ -123,7 +126,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
         children: [
           Expanded(
             child: document.imagePaths.isEmpty
-                ? const Center(child: Icon(Icons.picture_as_pdf_rounded, size: 90, color: Colors.white38))
+                ? const Center(
+                    child: Icon(Icons.picture_as_pdf_rounded, size: 90, color: Colors.white38),
+                  )
                 : PageView.builder(
                     itemCount: document.imagePaths.length,
                     itemBuilder: (context, index) {
@@ -134,6 +139,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
                           child: Image.file(
                             File(document.imagePaths[index]),
                             fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.broken_image_outlined,
+                              color: Colors.white38,
+                              size: 60,
+                            ),
                           ),
                         ),
                       );
@@ -152,7 +162,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
               children: [
                 if (document.imagePaths.length > 1)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 18),
+                    padding: const EdgeInsets.only(bottom: 16),
                     child: Text(
                       '${document.imagePaths.length} páginas',
                       style: TextStyle(color: Colors.grey.shade400, fontSize: 13),

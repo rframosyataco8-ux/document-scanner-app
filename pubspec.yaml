@@ -1,5 +1,5 @@
 name: document_scanner_app
-description: DocScan Pro - Escáner profesional listo para integrarse con cualquier sistema.
+description: DocScan Pro - Escáner profesional listo para PostgreSQL + API.
 publish_to: 'none'
 version: 1.0.0+1
 

@@ -1,64 +1,91 @@
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/scanned_document.dart';
 
-/// Servicio abstracto listo para conectar con el sistema real.
-/// Por ahora funciona en modo local. Cuando tengamos la API,
-/// solo implementamos esta interfaz.
+/// Interfaz limpia.
+/// Cuando conectemos PostgreSQL + API, solo creamos
+/// una nueva clase que implemente esto.
 abstract class DocumentService {
   Future<List<ScannedDocument>> getAllDocuments();
   Future<void> saveDocument(ScannedDocument document);
   Future<void> deleteDocument(String id);
-  Future<ScannedDocument> uploadToSystem(ScannedDocument document);
   Future<void> updateDocument(ScannedDocument document);
+  Future<ScannedDocument> uploadToSystem(ScannedDocument document);
 }
 
-/// Implementación local (temporal).
-/// Más adelante se reemplaza por ApiDocumentService.
+/// Implementación local con persistencia real.
+/// Los documentos sobreviven al cerrar la app.
 class LocalDocumentService implements DocumentService {
-  final List<ScannedDocument> _documents = [];
+  static const _storageKey = 'scanned_documents';
+
+  Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
   @override
   Future<List<ScannedDocument>> getAllDocuments() async {
-    // Simula un pequeño delay de red
-    await Future.delayed(const Duration(milliseconds: 200));
-    return List.from(_documents);
+    final prefs = await _prefs;
+    final raw = prefs.getStringList(_storageKey) ?? [];
+    return raw
+        .map((e) => ScannedDocument.fromJson(jsonDecode(e) as Map<String, dynamic>))
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   @override
   Future<void> saveDocument(ScannedDocument document) async {
-    _documents.insert(0, document);
+    final docs = await getAllDocuments();
+    docs.insert(0, document);
+    await _persist(docs);
   }
 
   @override
   Future<void> deleteDocument(String id) async {
-    _documents.removeWhere((d) => d.id == id);
+    final docs = await getAllDocuments();
+    docs.removeWhere((d) => d.id == id);
+    await _persist(docs);
   }
 
   @override
   Future<void> updateDocument(ScannedDocument document) async {
-    final index = _documents.indexWhere((d) => d.id == document.id);
+    final docs = await getAllDocuments();
+    final index = docs.indexWhere((d) => d.id == document.id);
     if (index != -1) {
-      _documents[index] = document;
+      docs[index] = document;
+      await _persist(docs);
     }
   }
 
   /// Simula la subida al sistema.
-  /// Aquí es donde más adelante pondremos la llamada real a la API.
+  /// Aquí es donde más adelante pondremos la llamada real a la API + PostgreSQL.
   @override
   Future<ScannedDocument> uploadToSystem(ScannedDocument document) async {
-    // Simulamos tiempo de subida
+    // Simulamos el tiempo de red
     await Future.delayed(const Duration(seconds: 2));
 
-    // Aquí iría:
-    // final response = await http.post(...)
-    // final remoteId = response.data['id'];
+    // ======================================================
+    // AQUÍ IRÁ LA CONEXIÓN REAL:
+    //
+    // final response = await http.post(
+    //   Uri.parse('https://tu-api.com/documents'),
+    //   headers: {'Authorization': 'Bearer $token'},
+    //   body: {...}
+    // );
+    //
+    // El backend guardará en PostgreSQL y devolverá el id.
+    // ======================================================
 
     final uploaded = document.copyWith(
       status: DocumentStatus.uploaded,
-      remoteId: 'SYS-${DateTime.now().millisecondsSinceEpoch}',
-      uploadedAt: DateTime.now().toIso8601String(),
+      remoteId: 'PG-${DateTime.now().millisecondsSinceEpoch}',
+      uploadedAt: DateTime.now(),
     );
 
     await updateDocument(uploaded);
     return uploaded;
+  }
+
+  Future<void> _persist(List<ScannedDocument> docs) async {
+    final prefs = await _prefs;
+    final raw = docs.map((d) => jsonEncode(d.toJson())).toList();
+    await prefs.setStringList(_storageKey, raw);
   }
 }
