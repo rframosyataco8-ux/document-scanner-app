@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/home_screen.dart';
 import 'services/fcm_service.dart';
+import 'services/network_monitor.dart';
 import 'services/upload_queue.dart';
 import 'theme/app_theme.dart';
 
@@ -14,11 +15,9 @@ Future<void> main() async {
     ),
   );
 
-  // FCM opcional: si no hay google-services.json, la app sigue funcionando
   await FcmService.instance.init();
-
-  // Cola offline siempre activa
   await UploadQueue.instance.start();
+  await NetworkMonitor.instance.start();
 
   runApp(const DocScanProApp());
 }
