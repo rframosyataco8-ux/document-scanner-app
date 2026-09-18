@@ -5,25 +5,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/scanned_document.dart';
 import 'api_config.dart';
 
-/// Interfaz limpia.
 abstract class DocumentService {
   Future<List<ScannedDocument>> getAllDocuments();
   Future<void> saveDocument(ScannedDocument document);
   Future<void> deleteDocument(String id);
   Future<void> updateDocument(ScannedDocument document);
-
-  /// Sube al Sistema de Guías (RomEx).
-  /// [meta] debe contener: numero_guia, zona, fecha_recepcion
-  /// y opcionalmente cantidad_sacos, kilos.
   Future<ScannedDocument> uploadToSystem(
     ScannedDocument document, {
     required Map<String, String> meta,
   });
 }
 
-/// Implementación local + subida real al API cuando hay sesión QR.
 class LocalDocumentService implements DocumentService {
-  static const _storageKey = 'scanned_documents';
+  static const _storageKey = 'scanned_documents_v2';
 
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
@@ -31,6 +25,17 @@ class LocalDocumentService implements DocumentService {
   Future<List<ScannedDocument>> getAllDocuments() async {
     final prefs = await _prefs;
     final raw = prefs.getStringList(_storageKey) ?? [];
+    // Migración suave desde clave antigua
+    if (raw.isEmpty) {
+      final legacy = prefs.getStringList('scanned_documents') ?? [];
+      if (legacy.isNotEmpty) {
+        await prefs.setStringList(_storageKey, legacy);
+        return legacy
+            .map((e) => ScannedDocument.fromJson(jsonDecode(e) as Map<String, dynamic>))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      }
+    }
     return raw
         .map((e) => ScannedDocument.fromJson(jsonDecode(e) as Map<String, dynamic>))
         .toList()
@@ -76,6 +81,26 @@ class LocalDocumentService implements DocumentService {
       throw Exception('No hay PDF disponible. Escanea de nuevo generando PDF.');
     }
 
+    final numero = meta['numero_guia']?.trim() ?? '';
+    final zona = meta['zona']?.trim() ?? '';
+    final fecha = meta['fecha_recepcion']?.trim() ?? '';
+    if (numero.isEmpty || zona.isEmpty || fecha.isEmpty) {
+      throw Exception('Número de guía, zona y fecha son obligatorios.');
+    }
+
+    // Guardar meta localmente (para reintento)
+    var working = document.copyWith(
+      status: DocumentStatus.uploading,
+      clearError: true,
+      numeroGuia: numero,
+      zona: zona,
+      fechaRecepcion: fecha,
+      cantidadSacos: meta['cantidad_sacos']?.trim(),
+      kilos: meta['kilos']?.trim(),
+      title: numero,
+    );
+    await updateDocument(working);
+
     final baseUrl = await ApiConfig.getBaseUrl();
     final uri = Uri.parse('$baseUrl/api/guias');
 
@@ -83,44 +108,61 @@ class LocalDocumentService implements DocumentService {
     request.headers['Authorization'] = 'Bearer $token';
     request.headers['Accept'] = 'application/json';
 
-    request.fields['numero_guia'] = meta['numero_guia']?.trim() ?? '';
-    request.fields['zona'] = meta['zona']?.trim() ?? '';
-    request.fields['fecha_recepcion'] = meta['fecha_recepcion']?.trim() ?? '';
-    if ((meta['cantidad_sacos'] ?? '').isNotEmpty) {
-      request.fields['cantidad_sacos'] = meta['cantidad_sacos']!;
+    request.fields['numero_guia'] = numero;
+    request.fields['zona'] = zona;
+    request.fields['fecha_recepcion'] = fecha;
+    if ((meta['cantidad_sacos'] ?? '').trim().isNotEmpty) {
+      request.fields['cantidad_sacos'] = meta['cantidad_sacos']!.trim();
     }
-    if ((meta['kilos'] ?? '').isNotEmpty) {
-      request.fields['kilos'] = meta['kilos']!;
+    if ((meta['kilos'] ?? '').trim().isNotEmpty) {
+      request.fields['kilos'] = meta['kilos']!.trim();
     }
 
     request.files.add(await http.MultipartFile.fromPath(
       'archivo',
       pdfPath,
-      filename: 'guia_${document.id}.pdf',
+      filename: 'guia_${numero.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.pdf',
     ));
 
-    final streamed = await request.send().timeout(const Duration(seconds: 60));
-    final response = await http.Response.fromStream(streamed);
-    final body = _tryJson(response.body);
+    try {
+      final streamed = await request.send().timeout(const Duration(seconds: 90));
+      final response = await http.Response.fromStream(streamed);
+      final body = _tryJson(response.body);
 
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      final guia = body['guia'] as Map<String, dynamic>?;
-      final remoteId = guia != null ? '${guia['id']}' : 'OK-${DateTime.now().millisecondsSinceEpoch}';
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final guia = body['guia'] as Map<String, dynamic>?;
+        final remoteId =
+            guia != null ? '${guia['id']}' : 'OK-${DateTime.now().millisecondsSinceEpoch}';
 
-      final uploaded = document.copyWith(
-        status: DocumentStatus.uploaded,
-        remoteId: remoteId,
-        uploadedAt: DateTime.now(),
-        title: meta['numero_guia']?.isNotEmpty == true
-            ? meta['numero_guia']!
-            : document.title,
-      );
-      await updateDocument(uploaded);
-      return uploaded;
+        final uploaded = working.copyWith(
+          status: DocumentStatus.uploaded,
+          remoteId: remoteId,
+          uploadedAt: DateTime.now(),
+          clearError: true,
+        );
+        await updateDocument(uploaded);
+        return uploaded;
+      }
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await ApiConfig.clearSession();
+        final msg = body['error'] as String? ?? 'Sesión expirada. Vuelve a escanear el QR.';
+        final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
+        await updateDocument(failed);
+        throw Exception(msg);
+      }
+
+      final msg = body['error'] as String? ?? 'Error al subir la guía (${response.statusCode})';
+      final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
+      await updateDocument(failed);
+      throw Exception(msg);
+    } catch (e) {
+      if (e is Exception && e.toString().contains('Sesión expirada')) rethrow;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
+      await updateDocument(failed);
+      rethrow;
     }
-
-    final msg = body['error'] as String? ?? 'Error al subir la guía (${response.statusCode})';
-    throw Exception(msg);
   }
 
   Future<void> _persist(List<ScannedDocument> docs) async {

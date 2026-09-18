@@ -1,17 +1,14 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Configuración de conexión al Sistema de Guías de Cacao.
-/// El QR apunta a una URL; el app extrae el código y habla con /api.
 class ApiConfig {
   static const _keyBaseUrl = 'api_base_url';
   static const _keyToken = 'auth_token';
   static const _keyUserJson = 'auth_user_json';
   static const _keyPairedAt = 'paired_at';
+  static const _keyLastZonas = 'last_zonas';
 
-  /// Valor por defecto (cámbialo en Ajustes o al emparejar).
-  /// En red local usa la IP de la PC, ej: http://192.168.1.10:3000
-  /// Emulador Android: http://10.0.2.2:3000
+  /// Emulador Android → host machine. En físico usa Ajustes.
   static const String defaultBaseUrl = 'http://10.0.2.2:3000';
 
   static Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
@@ -53,6 +50,13 @@ class ApiConfig {
     return null;
   }
 
+  static Future<DateTime?> getPairedAt() async {
+    final p = await _prefs;
+    final raw = p.getString(_keyPairedAt);
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
+  }
+
   static Future<bool> isPaired() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
@@ -63,5 +67,15 @@ class ApiConfig {
     await p.remove(_keyToken);
     await p.remove(_keyUserJson);
     await p.remove(_keyPairedAt);
+  }
+
+  static Future<void> saveZonas(List<String> zonas) async {
+    final p = await _prefs;
+    await p.setStringList(_keyLastZonas, zonas);
+  }
+
+  static Future<List<String>> getZonas() async {
+    final p = await _prefs;
+    return p.getStringList(_keyLastZonas) ?? [];
   }
 }

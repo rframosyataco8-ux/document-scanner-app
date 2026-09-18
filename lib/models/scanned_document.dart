@@ -5,8 +5,16 @@ class ScannedDocument {
   final String? pdfPath;
   final DateTime createdAt;
   final DocumentStatus status;
-  final String? remoteId; // ID del sistema (PostgreSQL) cuando se suba
+  final String? remoteId;
   final DateTime? uploadedAt;
+  final String? lastError;
+
+  /// Metadatos de guía (persistidos para reintento).
+  final String? numeroGuia;
+  final String? zona;
+  final String? fechaRecepcion;
+  final String? cantidadSacos;
+  final String? kilos;
 
   ScannedDocument({
     required this.id,
@@ -17,7 +25,18 @@ class ScannedDocument {
     this.status = DocumentStatus.local,
     this.remoteId,
     this.uploadedAt,
+    this.lastError,
+    this.numeroGuia,
+    this.zona,
+    this.fechaRecepcion,
+    this.cantidadSacos,
+    this.kilos,
   });
+
+  bool get hasGuiaMeta =>
+      (numeroGuia?.isNotEmpty == true) &&
+      (zona?.isNotEmpty == true) &&
+      (fechaRecepcion?.isNotEmpty == true);
 
   ScannedDocument copyWith({
     String? title,
@@ -26,6 +45,13 @@ class ScannedDocument {
     DocumentStatus? status,
     String? remoteId,
     DateTime? uploadedAt,
+    String? lastError,
+    bool clearError = false,
+    String? numeroGuia,
+    String? zona,
+    String? fechaRecepcion,
+    String? cantidadSacos,
+    String? kilos,
   }) {
     return ScannedDocument(
       id: id,
@@ -36,8 +62,22 @@ class ScannedDocument {
       status: status ?? this.status,
       remoteId: remoteId ?? this.remoteId,
       uploadedAt: uploadedAt ?? this.uploadedAt,
+      lastError: clearError ? null : (lastError ?? this.lastError),
+      numeroGuia: numeroGuia ?? this.numeroGuia,
+      zona: zona ?? this.zona,
+      fechaRecepcion: fechaRecepcion ?? this.fechaRecepcion,
+      cantidadSacos: cantidadSacos ?? this.cantidadSacos,
+      kilos: kilos ?? this.kilos,
     );
   }
+
+  Map<String, String> get metaMap => {
+        'numero_guia': numeroGuia ?? '',
+        'zona': zona ?? '',
+        'fecha_recepcion': fechaRecepcion ?? '',
+        'cantidad_sacos': cantidadSacos ?? '',
+        'kilos': kilos ?? '',
+      };
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -48,6 +88,12 @@ class ScannedDocument {
         'status': status.name,
         'remoteId': remoteId,
         'uploadedAt': uploadedAt?.toIso8601String(),
+        'lastError': lastError,
+        'numeroGuia': numeroGuia,
+        'zona': zona,
+        'fechaRecepcion': fechaRecepcion,
+        'cantidadSacos': cantidadSacos,
+        'kilos': kilos,
       };
 
   factory ScannedDocument.fromJson(Map<String, dynamic> json) {
@@ -65,13 +111,19 @@ class ScannedDocument {
       uploadedAt: json['uploadedAt'] != null
           ? DateTime.parse(json['uploadedAt'] as String)
           : null,
+      lastError: json['lastError'] as String?,
+      numeroGuia: json['numeroGuia'] as String?,
+      zona: json['zona'] as String?,
+      fechaRecepcion: json['fechaRecepcion'] as String?,
+      cantidadSacos: json['cantidadSacos'] as String?,
+      kilos: json['kilos'] as String?,
     );
   }
 }
 
 enum DocumentStatus {
-  local, // Solo en el celular
-  uploading, // Subiendo al sistema
-  uploaded, // Ya está en PostgreSQL
-  error, // Falló la subida
+  local,
+  uploading,
+  uploaded,
+  error,
 }
