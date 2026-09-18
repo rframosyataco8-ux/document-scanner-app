@@ -4,6 +4,9 @@ import 'package:share_plus/share_plus.dart';
 import '../models/scanned_document.dart';
 import '../services/api_config.dart';
 import '../services/document_service.dart';
+import '../theme/app_theme.dart';
+import 'qr_pair_screen.dart';
+import 'upload_guia_screen.dart';
 
 class PreviewScreen extends StatefulWidget {
   final ScannedDocument document;
@@ -25,7 +28,6 @@ class PreviewScreen extends StatefulWidget {
 
 class _PreviewScreenState extends State<PreviewScreen> {
   late ScannedDocument document;
-  bool isUploading = false;
 
   @override
   void initState() {
@@ -45,19 +47,31 @@ class _PreviewScreenState extends State<PreviewScreen> {
   }
 
   Future<void> _uploadToSystem() async {
-    if (isUploading || document.status == DocumentStatus.uploaded) return;
+    if (document.status == DocumentStatus.uploaded) return;
 
     final paired = await ApiConfig.isPaired();
     if (!paired) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Primero escanea el QR de "Conectar móvil"'),
-          backgroundColor: Colors.orange.shade800,
-          behavior: SnackBarBehavior.floating,
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Sin sesion'),
+          content: const Text('Debes escanear el QR de Conectar movil antes de subir.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Escanear QR')),
+          ],
         ),
       );
-      return;
+      if (go == true && mounted) {
+        final ok = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => const QrPairScreen()),
+        );
+        if (ok != true) return;
+      } else {
+        return;
+      }
     }
 
     if (document.pdfPath == null) {
@@ -65,164 +79,48 @@ class _PreviewScreenState extends State<PreviewScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Este documento no tiene PDF. Escanea de nuevo con formato PDF.'),
-          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
     }
 
-    final meta = await _askGuiaMeta();
-    if (meta == null || !mounted) return;
+    final updated = await Navigator.push<ScannedDocument>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UploadGuiaScreen(
+          document: document,
+          documentService: widget.documentService,
+        ),
+      ),
+    );
 
-    setState(() {
-      isUploading = true;
-      document = document.copyWith(status: DocumentStatus.uploading);
-    });
-    widget.onUpdated(document);
-
-    try {
-      final uploaded = await widget.documentService.uploadToSystem(
-        document,
-        meta: meta,
+    if (updated != null && mounted) {
+      setState(() => document = updated);
+      widget.onUpdated(updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            updated.status == DocumentStatus.uploaded
+                ? 'Guia subida al sistema'
+                : (updated.lastError ?? 'Revisa el estado'),
+          ),
+          backgroundColor: updated.status == DocumentStatus.uploaded
+              ? Colors.green.shade700
+              : Colors.red.shade700,
+        ),
       );
-      setState(() {
-        document = uploaded;
-        isUploading = false;
-      });
-      widget.onUpdated(uploaded);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('¡Guía subida al sistema!'),
-            backgroundColor: Colors.green.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() {
-        document = document.copyWith(status: DocumentStatus.error);
-        isUploading = false;
-      });
-      widget.onUpdated(document);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+    } else {
+      // Recargar por si se guardo meta/error en el servicio
+      final all = await widget.documentService.getAllDocuments();
+      final fresh = all.where((d) => d.id == document.id).cast<ScannedDocument?>().firstWhere(
+            (d) => d != null,
+            orElse: () => null,
+          );
+      if (fresh != null && mounted) {
+        setState(() => document = fresh);
+        widget.onUpdated(fresh);
       }
     }
-  }
-
-  Future<Map<String, String>?> _askGuiaMeta() async {
-    final numero = TextEditingController();
-    final zona = TextEditingController();
-    final sacos = TextEditingController();
-    final kilos = TextEditingController();
-    final fecha = TextEditingController(
-      text: DateTime.now().toIso8601String().slice(0, 10),
-    );
-
-    return showDialog<Map<String, String>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Datos de la guía'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: numero,
-                  decoration: const InputDecoration(
-                    labelText: 'Número de guía *',
-                    hintText: 'G-2026-00487',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: zona,
-                  decoration: const InputDecoration(
-                    labelText: 'Zona *',
-                    hintText: 'Ayacucho',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: fecha,
-                  decoration: const InputDecoration(
-                    labelText: 'Fecha recepción *',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.datetime,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: sacos,
-                        decoration: const InputDecoration(
-                          labelText: 'Sacos',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: kilos,
-                        decoration: const InputDecoration(
-                          labelText: 'Kilos',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (numero.text.trim().isEmpty ||
-                    zona.text.trim().isEmpty ||
-                    fecha.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('Número, zona y fecha son obligatorios')),
-                  );
-                  return;
-                }
-                Navigator.pop(ctx, {
-                  'numero_guia': numero.text.trim(),
-                  'zona': zona.text.trim(),
-                  'fecha_recepcion': fecha.text.trim(),
-                  'cantidad_sacos': sacos.text.trim(),
-                  'kilos': kilos.text.trim(),
-                });
-              },
-              child: const Text('Subir'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _confirmDelete() {
@@ -231,7 +129,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Eliminar documento'),
-        content: const Text('¿Estás seguro de que quieres eliminar este documento?'),
+        content: const Text('¿Seguro que quieres eliminar este documento?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           TextButton(
@@ -295,6 +193,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     },
                   ),
           ),
+          if (document.lastError != null && document.status == DocumentStatus.error)
+            Container(
+              width: double.infinity,
+              color: Colors.red.shade900,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Text(
+                document.lastError!,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
           Container(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
             decoration: const BoxDecoration(
@@ -305,9 +213,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
               children: [
                 if (document.imagePaths.length > 1)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: Text(
-                      '${document.imagePaths.length} páginas',
+                      '${document.imagePaths.length} paginas',
                       style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                     ),
                   ),
@@ -326,7 +234,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         Icon(Icons.check_circle_rounded, color: Colors.green.shade400, size: 18),
                         const SizedBox(width: 8),
                         Text(
-                          'Ya está en el sistema',
+                          'En el sistema${document.remoteId != null ? ' · #${document.remoteId}' : ''}',
                           style: TextStyle(
                             color: Colors.green.shade300,
                             fontWeight: FontWeight.w600,
@@ -349,20 +257,19 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _ActionButton(
-                        icon: isUploading
-                            ? null
-                            : document.status == DocumentStatus.uploaded
-                                ? Icons.cloud_done_rounded
+                        icon: document.status == DocumentStatus.uploaded
+                            ? Icons.cloud_done_rounded
+                            : document.status == DocumentStatus.error
+                                ? Icons.refresh_rounded
                                 : Icons.cloud_upload_rounded,
-                        label: isUploading
-                            ? 'Subiendo...'
-                            : document.status == DocumentStatus.uploaded
-                                ? 'Subido'
-                                : 'Subir al sistema',
+                        label: document.status == DocumentStatus.uploaded
+                            ? 'Subido'
+                            : document.status == DocumentStatus.error
+                                ? 'Reintentar'
+                                : 'Subir guia',
                         color: document.status == DocumentStatus.uploaded
                             ? Colors.green.shade400
-                            : const Color(0xFF34D399),
-                        isLoading: isUploading,
+                            : RomexColors.accent,
                         onTap: _uploadToSystem,
                       ),
                     ),
@@ -378,24 +285,22 @@ class _PreviewScreenState extends State<PreviewScreen> {
 }
 
 class _ActionButton extends StatelessWidget {
-  final IconData? icon;
+  final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
-  final bool isLoading;
 
   const _ActionButton({
-    this.icon,
+    required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
-    this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: isLoading ? null : onTap,
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
@@ -405,14 +310,7 @@ class _ActionButton extends StatelessWidget {
         ),
         child: Column(
           children: [
-            if (isLoading)
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(color: color, strokeWidth: 2.5),
-              )
-            else
-              Icon(icon, color: color, size: 26),
+            Icon(icon, color: color, size: 26),
             const SizedBox(height: 8),
             Text(
               label,
@@ -427,8 +325,4 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
-}
-
-extension on String {
-  String slice(int start, int end) => substring(start, end > length ? length : end);
 }

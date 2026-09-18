@@ -104,8 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _sectionTitle('Servidor del sistema'),
                 const SizedBox(height: 6),
                 Text(
-                  'IP o dominio del backend. En el celular no uses localhost; '
-                  'usa la IP de la PC en la misma Wi‑Fi (ej. http://192.168.1.20:3000).',
+                  'IP o dominio del backend. En el celular no uses localhost; usa la IP de la PC en la misma Wi-Fi (ej. http://192.168.1.20:3000).',
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 12),
@@ -130,7 +129,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.wifi_tethering),
-                        label: const Text('Probar conexión'),
+                        label: const Text('Probar conexion'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -172,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
                 const SizedBox(height: 28),
-                _sectionTitle('Sesión QR'),
+                _sectionTitle('Sesion QR'),
                 const SizedBox(height: 12),
                 if (_paired && _user != null)
                   Card(
@@ -250,15 +249,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ListTile(
                       leading: Icon(Icons.link_off, color: Colors.grey.shade500),
                       title: const Text('No conectado'),
-                      subtitle: const Text('Escanea el QR de Conectar móvil en la PC'),
+                      subtitle: const Text('Escanea el QR de Conectar movil en la PC'),
                     ),
                   ),
                 const SizedBox(height: 28),
                 _sectionTitle('Acerca de'),
                 const SizedBox(height: 8),
                 Text(
-                  'DocScan Pro v1.2 · Exportadora Romex S.A.\n'
-                  'Escaneo ML Kit + emparejamiento QR + subida de guías.',
+                  'DocScan Pro v1.2 · Exportadora Romex S.A. Escaneo ML Kit + emparejamiento QR + subida de guias.',
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
                 ),
               ],
