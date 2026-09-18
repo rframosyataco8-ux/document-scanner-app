@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Configuración de conexión al Sistema de Guías de Cacao.
@@ -10,6 +11,7 @@ class ApiConfig {
 
   /// Valor por defecto (cámbialo en Ajustes o al emparejar).
   /// En red local usa la IP de la PC, ej: http://192.168.1.10:3000
+  /// Emulador Android: http://10.0.2.2:3000
   static const String defaultBaseUrl = 'http://10.0.2.2:3000';
 
   static Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
@@ -36,7 +38,7 @@ class ApiConfig {
   }) async {
     final p = await _prefs;
     await p.setString(_keyToken, token);
-    await p.setString(_keyUserJson, _encodeUser(user));
+    await p.setString(_keyUserJson, jsonEncode(user));
     await p.setString(_keyPairedAt, DateTime.now().toIso8601String());
   }
 
@@ -44,7 +46,11 @@ class ApiConfig {
     final p = await _prefs;
     final raw = p.getString(_keyUserJson);
     if (raw == null || raw.isEmpty) return null;
-    return _decodeUser(raw);
+    try {
+      final v = jsonDecode(raw);
+      if (v is Map<String, dynamic>) return v;
+    } catch (_) {}
+    return null;
   }
 
   static Future<bool> isPaired() async {
@@ -57,22 +63,5 @@ class ApiConfig {
     await p.remove(_keyToken);
     await p.remove(_keyUserJson);
     await p.remove(_keyPairedAt);
-  }
-
-  static String _encodeUser(Map<String, dynamic> user) {
-    // Simple key=value para no añadir dependencia de json en este archivo
-    // (usamos jsonEncode desde otros sitios).
-    return user.entries.map((e) => '${e.key}=${e.value}').join('|');
-  }
-
-  static Map<String, dynamic> _decodeUser(String raw) {
-    final map = <String, dynamic>{};
-    for (final part in raw.split('|')) {
-      final i = part.indexOf('=');
-      if (i > 0) {
-        map[part.substring(0, i)] = part.substring(i + 1);
-      }
-    }
-    return map;
   }
 }
