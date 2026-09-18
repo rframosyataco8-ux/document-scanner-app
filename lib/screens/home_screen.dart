@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
@@ -6,12 +7,13 @@ import 'package:uuid/uuid.dart';
 import '../models/scanned_document.dart';
 import '../services/api_config.dart';
 import '../services/document_service.dart';
+import '../services/upload_queue.dart';
 import '../theme/app_theme.dart';
 import 'preview_screen.dart';
 import 'qr_pair_screen.dart';
 import 'settings_screen.dart';
 
-enum _Filter { all, local, uploaded, error }
+enum _Filter { all, local, queued, uploaded, error }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String? pairedName;
   _Filter filter = _Filter.all;
   late AnimationController _pulseController;
+  StreamSubscription<UploadQueueEvent>? _queueSub;
 
   @override
   void initState() {
@@ -38,10 +41,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
     _bootstrap();
+    _queueSub = UploadQueue.instance.events.listen((ev) {
+      if (ev.document != null) {
+        setState(() {
+          final i = documents.indexWhere((d) => d.id == ev.document!.id);
+          if (i != -1) documents[i] = ev.document!;
+        });
+      }
+      if (ev.type == UploadQueueEventType.success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ev.message ?? 'Guía subida desde la cola'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _bootstrap() async {
     await Future.wait([_loadDocuments(), _checkPair()]);
+    await UploadQueue.instance.processQueue();
+    await _loadDocuments();
   }
 
   Future<void> _checkPair() async {
@@ -64,10 +85,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  int get queuedCount =>
+      documents.where((d) => d.status == DocumentStatus.queued).length;
+
   List<ScannedDocument> get filtered {
     switch (filter) {
       case _Filter.local:
-        return documents.where((d) => d.status == DocumentStatus.local || d.status == DocumentStatus.uploading).toList();
+        return documents
+            .where((d) =>
+                d.status == DocumentStatus.local || d.status == DocumentStatus.uploading)
+            .toList();
+      case _Filter.queued:
+        return documents.where((d) => d.status == DocumentStatus.queued).toList();
       case _Filter.uploaded:
         return documents.where((d) => d.status == DocumentStatus.uploaded).toList();
       case _Filter.error:
@@ -79,6 +108,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _queueSub?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -175,6 +205,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             : RefreshIndicator(
                 color: RomexColors.primary,
                 onRefresh: () async {
+                  await UploadQueue.instance.processQueue();
                   await _loadDocuments();
                   await _checkPair();
                 },
@@ -182,8 +213,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
                     SliverToBoxAdapter(child: _buildHeader()),
-                    if (!isPaired)
-                      const SliverToBoxAdapter(child: _PairBanner()),
+                    if (!isPaired) const SliverToBoxAdapter(child: _PairBanner()),
+                    if (queuedCount > 0)
+                      SliverToBoxAdapter(child: _QueueBanner(count: queuedCount)),
                     SliverToBoxAdapter(child: _buildScanButton()),
                     if (documents.isNotEmpty) ...[
                       SliverToBoxAdapter(child: _buildFilters()),
@@ -217,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           child: Padding(
                             padding: EdgeInsets.all(24),
                             child: Text(
-                              'Aun no hay documentos. Toca el boton para escanear una guia.',
+                              'Aún no hay documentos. Toca el botón para escanear una guía.',
                               textAlign: TextAlign.center,
                               style: TextStyle(color: RomexColors.textMuted),
                             ),
@@ -338,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 4),
           Text(
-            'Guias de cacao · PDF profesional',
+            'Guías de cacao · PDF profesional',
             style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
           ),
         ],
@@ -387,6 +419,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               children: [
                 _chip('Todos', _Filter.all),
                 _chip('Local', _Filter.local),
+                _chip('En cola', _Filter.queued),
                 _chip('Subidos', _Filter.uploaded),
                 _chip('Error', _Filter.error),
               ],
@@ -411,6 +444,45 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
           color: selected ? RomexColors.primaryDark : Colors.grey.shade700,
           fontSize: 13,
+        ),
+      ),
+    );
+  }
+}
+
+class _QueueBanner extends StatelessWidget {
+  final int count;
+  const _QueueBanner({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Material(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: () => UploadQueue.instance.processQueue(),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(Icons.cloud_queue, color: Colors.orange.shade800),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '$count guía(s) en cola offline — toca para reintentar',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange.shade900,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -453,7 +525,7 @@ class _PairBanner extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Escanea el QR de Conectar movil',
+                        'Escanea el QR de Conectar móvil',
                         style: TextStyle(fontSize: 12, color: Colors.green.shade700),
                       ),
                     ],
@@ -485,6 +557,8 @@ class _DocumentCard extends StatelessWidget {
         return Colors.green;
       case DocumentStatus.error:
         return Colors.red;
+      case DocumentStatus.queued:
+        return Colors.deepOrange;
     }
   }
 
@@ -498,6 +572,8 @@ class _DocumentCard extends StatelessWidget {
         return 'En el sistema';
       case DocumentStatus.error:
         return 'Error al subir';
+      case DocumentStatus.queued:
+        return 'En cola offline';
     }
   }
 
@@ -576,7 +652,9 @@ class _DocumentCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          document.status == DocumentStatus.error && document.lastError != null
+                          (document.status == DocumentStatus.error ||
+                                      document.status == DocumentStatus.queued) &&
+                                  document.lastError != null
                               ? document.lastError!
                               : statusText,
                           maxLines: 1,

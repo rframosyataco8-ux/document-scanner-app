@@ -1,45 +1,37 @@
-# DocScan Pro · RomEx (v1.2)
+# DocScan Pro · RomEx (v1.3)
 
-App Flutter de escaneo de documentos conectada al **Sistema de Guias de Cacao**.
+App Flutter de escaneo conectada al **Sistema de Guías de Cacao**.
 
-Al escanear el QR de **Conectar movil** generado en la PC, la app obtiene un JWT y sube guias (PDF + metadatos) al backend real.
+## Novedades v1.3
 
-## Novedades v1.2
+### Cola offline automática
+- Si falla la subida por red, el documento pasa a estado **queued**.
+- Al recuperar Wi‑Fi/datos, `UploadQueue` reintenta sola (hasta 8 veces).
+- Banner naranja en home + filtro **En cola** + botón en Ajustes «Procesar cola ahora».
 
-- Tema visual RomEx (verde institucional)
-- Formulario dedicado de guia (numero, zona con chips, fecha, sacos, kilos)
-- Reintento de subida con metadatos persistidos
-- Health-check del servidor en Ajustes
-- Carga de zonas desde `/api/guias/estructura`
-- Manejo de sesion expirada (401/403)
-- Mensajes de error por documento
+### Notificaciones push FCM
+- Tras emparejar QR, registra el token en `POST /api/devices/register`.
+- Compatible con el backend (`device_tokens` + `notifyGuiaUploaded`).
+- Si Firebase no está configurado, la app **sigue funcionando** (FCM opcional).
 
-## Flujo
+## Activar FCM (opcional)
 
-1. PC: Conectar movil → Generar QR
-2. App: Conectar al sistema → escanear QR (o codigo manual)
-3. Ajustes: URL del servidor = IP de la PC (ej. `http://192.168.1.20:3000`)
-4. Escanear guia (ML Kit PDF) → Subir guia → completar datos → listo
+1. Crea un proyecto en [Firebase Console](https://console.firebase.google.com).
+2. Añade app Android con package `com.example.document_scanner_app` (o cambia el applicationId).
+3. Descarga `google-services.json` → colócalo en `android/app/`.
+4. En `android/settings.gradle` (o el root build) asegúrate de tener el plugin Google Services.
+5. En `android/app/build.gradle` descomenta:
+   ```gradle
+   id "com.google.gms.google-services"
+   ```
+6. En el backend define `FIREBASE_SERVICE_ACCOUNT` (JSON de cuenta de servicio).
+7. `flutter clean && flutter pub get && flutter run`
 
-## Arquitectura
+## Flujo de campo
 
-```
-lib/
-├── main.dart
-├── theme/app_theme.dart
-├── models/scanned_document.dart
-├── services/
-│   ├── api_config.dart
-│   ├── api_client.dart
-│   ├── pairing_service.dart
-│   └── document_service.dart
-└── screens/
-    ├── home_screen.dart
-    ├── qr_pair_screen.dart
-    ├── upload_guia_screen.dart
-    ├── preview_screen.dart
-    └── settings_screen.dart
-```
+1. Ajustes → URL del servidor (IP de la PC).
+2. Escanear QR de Conectar móvil.
+3. Escanear guía → Subir → si no hay red, queda en cola y se envía sola después.
 
 ## Correr
 
@@ -49,16 +41,5 @@ flutter pub get
 flutter run
 ```
 
-Celular fisico recomendado. Misma Wi-Fi que la PC. No uses `localhost` en el telefono.
-
-## Backend
-
-Compatible con **sistema-guias-cacao**:
-
-- `POST /api/pair/claim` `{ code }` → `{ token, user }`
-- `POST /api/guias` multipart + Bearer token
-- `GET /api/guias/estructura` (opcional, zonas)
-
 ---
-
 Exportadora Romex S.A.
