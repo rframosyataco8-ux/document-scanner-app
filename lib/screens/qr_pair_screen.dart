@@ -55,7 +55,9 @@ class _QrPairScreenState extends State<QrPairScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Conectado como ${result.user['nombre'] ?? result.user['username'] ?? 'usuario'}'),
+          content: Text(
+            'Conectado como ${result.user['nombre'] ?? result.user['username'] ?? 'usuario'}',
+          ),
           backgroundColor: Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
         ),
@@ -156,7 +158,6 @@ class _QrPairScreenState extends State<QrPairScreen> {
             controller: _controller,
             onDetect: _onDetect,
           ),
-          // Marco visual
           Center(
             child: Container(
               width: 260,
@@ -177,7 +178,9 @@ class _QrPairScreenState extends State<QrPairScreen> {
                   const CircularProgressIndicator(color: Colors.white)
                 else
                   const Text(
-                    'Apunta al QR de "Conectar móvil" en la PC',\n                    textAlign: TextAlign.center,\n                    style: TextStyle(color: Colors.white, fontSize: 15),
+                    'Apunta al QR de "Conectar móvil" en la PC',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 15),
                   ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
@@ -200,7 +203,7 @@ class _QrPairScreenState extends State<QrPairScreen> {
                   builder: (context, snap) {
                     return Text(
                       'Servidor: ${snap.data ?? '...'}',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                      style: const TextStyle(color: Colors.white54, fontSize: 12),
                     );
                   },
                 ),

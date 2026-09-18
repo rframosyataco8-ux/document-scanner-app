@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/scanned_document.dart';
+import '../services/api_config.dart';
 import '../services/document_service.dart';
 
 class PreviewScreen extends StatefulWidget {
@@ -46,6 +47,33 @@ class _PreviewScreenState extends State<PreviewScreen> {
   Future<void> _uploadToSystem() async {
     if (isUploading || document.status == DocumentStatus.uploaded) return;
 
+    final paired = await ApiConfig.isPaired();
+    if (!paired) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Primero escanea el QR de "Conectar móvil"'),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (document.pdfPath == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este documento no tiene PDF. Escanea de nuevo con formato PDF.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final meta = await _askGuiaMeta();
+    if (meta == null || !mounted) return;
+
     setState(() {
       isUploading = true;
       document = document.copyWith(status: DocumentStatus.uploading);
@@ -53,7 +81,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
     widget.onUpdated(document);
 
     try {
-      final uploaded = await widget.documentService.uploadToSystem(document);
+      final uploaded = await widget.documentService.uploadToSystem(
+        document,
+        meta: meta,
+      );
       setState(() {
         document = uploaded;
         isUploading = false;
@@ -63,7 +94,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('¡Documento subido al sistema!'),
+            content: const Text('¡Guía subida al sistema!'),
             backgroundColor: Colors.green.shade700,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -77,7 +108,121 @@ class _PreviewScreenState extends State<PreviewScreen> {
         isUploading = false;
       });
       widget.onUpdated(document);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
+  }
+
+  Future<Map<String, String>?> _askGuiaMeta() async {
+    final numero = TextEditingController();
+    final zona = TextEditingController();
+    final sacos = TextEditingController();
+    final kilos = TextEditingController();
+    final fecha = TextEditingController(
+      text: DateTime.now().toIso8601String().slice(0, 10),
+    );
+
+    return showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Datos de la guía'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: numero,
+                  decoration: const InputDecoration(
+                    labelText: 'Número de guía *',
+                    hintText: 'G-2026-00487',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: zona,
+                  decoration: const InputDecoration(
+                    labelText: 'Zona *',
+                    hintText: 'Ayacucho',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: fecha,
+                  decoration: const InputDecoration(
+                    labelText: 'Fecha recepción *',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.datetime,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: sacos,
+                        decoration: const InputDecoration(
+                          labelText: 'Sacos',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: kilos,
+                        decoration: const InputDecoration(
+                          labelText: 'Kilos',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (numero.text.trim().isEmpty ||
+                    zona.text.trim().isEmpty ||
+                    fecha.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Número, zona y fecha son obligatorios')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx, {
+                  'numero_guia': numero.text.trim(),
+                  'zona': zona.text.trim(),
+                  'fecha_recepcion': fecha.text.trim(),
+                  'cantidad_sacos': sacos.text.trim(),
+                  'kilos': kilos.text.trim(),
+                });
+              },
+              child: const Text('Subir'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _confirmDelete() {
@@ -150,8 +295,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     },
                   ),
           ),
-
-          // BARRA DE ACCIONES
           Container(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
             decoration: const BoxDecoration(
@@ -168,7 +311,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
                       style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                     ),
                   ),
-
                 if (document.status == DocumentStatus.uploaded)
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
@@ -194,7 +336,6 @@ class _PreviewScreenState extends State<PreviewScreen> {
                       ],
                     ),
                   ),
-
                 Row(
                   children: [
                     Expanded(
@@ -286,4 +427,8 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on String {
+  String slice(int start, int end) => substring(start, end > length ? length : end);
 }
