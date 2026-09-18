@@ -1,39 +1,34 @@
-# DocScan Pro · RomEx (v1.3)
+# DocScan Pro · RomEx (v1.4)
 
-App Flutter de escaneo conectada al **Sistema de Guías de Cacao**.
+App Flutter de escaneo conectada al Sistema de Guías de Cacao.
 
-## Novedades v1.3
+## v1.4 — implementado en código
 
-### Cola offline automática
-- Si falla la subida por red, el documento pasa a estado **queued**.
-- Al recuperar Wi‑Fi/datos, `UploadQueue` reintenta sola (hasta 8 veces).
-- Banner naranja en home + filtro **En cola** + botón en Ajustes «Procesar cola ahora».
+### Integración con base de datos local (SQLite)
+- Tabla `documents` en `romex_docscan.db` (sqflite).
+- Índices por `status` y `created_at`.
+- Migración automática desde SharedPreferences.
+- Cola offline y metadatos de guía persistidos en SQLite.
 
-### Notificaciones push FCM
-- Tras emparejar QR, registra el token en `POST /api/devices/register`.
-- Compatible con el backend (`device_tokens` + `notifyGuiaUploaded`).
-- Si Firebase no está configurado, la app **sigue funcionando** (FCM opcional).
+### Seguridad de tokens FCM / JWT
+- JWT y FCM en **flutter_secure_storage** (EncryptedSharedPreferences en Android).
+- Validación de token FCM plausible antes de enviarlo al backend.
+- Logs solo con token **enmascarado** (`abc123…xyz9`).
+- Limpieza de sesión al desconectar; no se imprime el secreto completo.
 
-## Activar FCM (opcional)
+### Validación de red por pasos
+Antes de escanear QR o subir guía se ejecuta:
+1. Conectividad del dispositivo
+2. Formato de URL (bloquea localhost en móvil)
+3. Resolución DNS/IP del host
+4. Ping a la API
+5. Sesión QR (si aplica)
 
-1. Crea un proyecto en [Firebase Console](https://console.firebase.google.com).
-2. Añade app Android con package `com.example.document_scanner_app` (o cambia el applicationId).
-3. Descarga `google-services.json` → colócalo en `android/app/`.
-4. En `android/settings.gradle` (o el root build) asegúrate de tener el plugin Google Services.
-5. En `android/app/build.gradle` descomenta:
-   ```gradle
-   id "com.google.gms.google-services"
-   ```
-6. En el backend define `FIREBASE_SERVICE_ACCOUNT` (JSON de cuenta de servicio).
-7. `flutter clean && flutter pub get && flutter run`
+UI: bottom sheet con cada paso en vivo + reintentar.
 
-## Flujo de campo
-
-1. Ajustes → URL del servidor (IP de la PC).
-2. Escanear QR de Conectar móvil.
-3. Escanear guía → Subir → si no hay red, queda en cola y se envía sola después.
-
-## Correr
+## Cola offline + FCM
+- Sin red → estado `queued` → reintento automático al recuperar conexión.
+- FCM opcional (requiere `google-services.json`).
 
 ```bash
 git pull

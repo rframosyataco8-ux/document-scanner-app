@@ -4,8 +4,8 @@ import '../models/scanned_document.dart';
 import '../services/api_client.dart';
 import '../services/document_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/network_validation_sheet.dart';
 
-/// Formulario completo para subir una guía al sistema.
 class UploadGuiaScreen extends StatefulWidget {
   final ScannedDocument document;
   final DocumentService documentService;
@@ -79,6 +79,15 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Validación de red + sesión antes de subir
+    final netOk = await showNetworkValidation(
+      context,
+      requireAuth: true,
+      title: 'Validando red antes de subir',
+    );
+    if (!netOk || !mounted) return;
+
     setState(() {
       _uploading = true;
       _error = null;
@@ -94,7 +103,6 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
     };
 
     try {
-      // Simula avance visual mientras sube
       setState(() => _progress = 0.4);
       final uploaded = await widget.documentService.uploadToSystem(
         widget.document,
@@ -193,7 +201,8 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
                 spacing: 6,
                 runSpacing: 6,
                 children: _zonas.take(8).map((z) {
-                  final selected = _zona.text.trim().toLowerCase() == z.toLowerCase();
+                  final selected =
+                      _zona.text.trim().toLowerCase() == z.toLowerCase();
                   return ChoiceChip(
                     label: Text(z, style: const TextStyle(fontSize: 12)),
                     selected: selected,

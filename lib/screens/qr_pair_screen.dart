@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_config.dart';
 import '../services/pairing_service.dart';
+import '../widgets/network_validation_sheet.dart';
 
-/// Pantalla para escanear el QR generado en el sistema (Conectar móvil).
 class QrPairScreen extends StatefulWidget {
   const QrPairScreen({super.key});
 
@@ -19,6 +19,26 @@ class _QrPairScreenState extends State<QrPairScreen> {
   bool _processing = false;
   String? _error;
   bool _torchOn = false;
+  bool _networkChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _preflight());
+  }
+
+  Future<void> _preflight() async {
+    final ok = await showNetworkValidation(
+      context,
+      requireAuth: false,
+      title: 'Validando red antes de escanear QR',
+    );
+    if (!mounted) return;
+    setState(() => _networkChecked = ok);
+    if (!ok) {
+      // Usuario puede seguir e intentar igual, o volver
+    }
+  }
 
   @override
   void dispose() {
@@ -70,7 +90,7 @@ class _QrPairScreenState extends State<QrPairScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Error de red. Revisa la URL del servidor en Ajustes.\n$e';
+        _error = 'Error de red. Revisa la URL del servidor en Ajustes. $e';
         _processing = false;
       });
     }
@@ -163,7 +183,10 @@ class _QrPairScreenState extends State<QrPairScreen> {
               width: 260,
               height: 260,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.white70, width: 2),
+                border: Border.all(
+                  color: _networkChecked ? Colors.greenAccent : Colors.white70,
+                  width: 2,
+                ),
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
