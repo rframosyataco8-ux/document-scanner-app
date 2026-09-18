@@ -8,8 +8,8 @@ class ScannedDocument {
   final String? remoteId;
   final DateTime? uploadedAt;
   final String? lastError;
+  final int retryCount;
 
-  /// Metadatos de guía (persistidos para reintento).
   final String? numeroGuia;
   final String? zona;
   final String? fechaRecepcion;
@@ -26,6 +26,7 @@ class ScannedDocument {
     this.remoteId,
     this.uploadedAt,
     this.lastError,
+    this.retryCount = 0,
     this.numeroGuia,
     this.zona,
     this.fechaRecepcion,
@@ -38,6 +39,9 @@ class ScannedDocument {
       (zona?.isNotEmpty == true) &&
       (fechaRecepcion?.isNotEmpty == true);
 
+  bool get isPendingUpload =>
+      status == DocumentStatus.queued || status == DocumentStatus.error;
+
   ScannedDocument copyWith({
     String? title,
     List<String>? imagePaths,
@@ -47,6 +51,7 @@ class ScannedDocument {
     DateTime? uploadedAt,
     String? lastError,
     bool clearError = false,
+    int? retryCount,
     String? numeroGuia,
     String? zona,
     String? fechaRecepcion,
@@ -63,6 +68,7 @@ class ScannedDocument {
       remoteId: remoteId ?? this.remoteId,
       uploadedAt: uploadedAt ?? this.uploadedAt,
       lastError: clearError ? null : (lastError ?? this.lastError),
+      retryCount: retryCount ?? this.retryCount,
       numeroGuia: numeroGuia ?? this.numeroGuia,
       zona: zona ?? this.zona,
       fechaRecepcion: fechaRecepcion ?? this.fechaRecepcion,
@@ -89,6 +95,7 @@ class ScannedDocument {
         'remoteId': remoteId,
         'uploadedAt': uploadedAt?.toIso8601String(),
         'lastError': lastError,
+        'retryCount': retryCount,
         'numeroGuia': numeroGuia,
         'zona': zona,
         'fechaRecepcion': fechaRecepcion,
@@ -112,6 +119,7 @@ class ScannedDocument {
           ? DateTime.parse(json['uploadedAt'] as String)
           : null,
       lastError: json['lastError'] as String?,
+      retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       numeroGuia: json['numeroGuia'] as String?,
       zona: json['zona'] as String?,
       fechaRecepcion: json['fechaRecepcion'] as String?,
@@ -126,4 +134,5 @@ enum DocumentStatus {
   uploading,
   uploaded,
   error,
+  queued, // En cola offline — se sube al recuperar red
 }
