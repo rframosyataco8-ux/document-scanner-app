@@ -4,8 +4,11 @@ import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../models/scanned_document.dart';
+import '../services/api_config.dart';
 import '../services/document_service.dart';
 import 'preview_screen.dart';
+import 'qr_pair_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,6 +22,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<ScannedDocument> documents = [];
   bool isScanning = false;
   bool isLoading = true;
+  bool isPaired = false;
+  String? pairedName;
   late AnimationController _pulseController;
 
   @override
@@ -29,6 +34,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
     _loadDocuments();
+    _checkPair();
+  }
+
+  Future<void> _checkPair() async {
+    final paired = await ApiConfig.isPaired();
+    final user = await ApiConfig.getUser();
+    if (!mounted) return;
+    setState(() {
+      isPaired = paired;
+      pairedName = user?['nombre']?.toString() ?? user?['username']?.toString();
+    });
   }
 
   Future<void> _loadDocuments() async {
@@ -45,6 +61,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openQrPair() async {
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const QrPairScreen()),
+    );
+    if (ok == true) {
+      await _checkPair();
+    }
   }
 
   Future<void> startScan() async {
@@ -137,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  // HEADER
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
                     child: Row(
@@ -156,23 +181,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Listo para PostgreSQL + API',
+                              isPaired
+                                  ? 'Conectado · ${pairedName ?? 'usuario'}'
+                                  : 'Escanea el QR para conectar',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.grey.shade500,
+                                color: isPaired ? Colors.green.shade700 : Colors.grey.shade500,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
                         ),
                         const Spacer(),
+                        IconButton(
+                          onPressed: _openQrPair,
+                          tooltip: 'Conectar con QR',
+                          icon: Icon(
+                            isPaired ? Icons.qr_code_2 : Icons.qr_code_scanner,
+                            color: isPaired ? Colors.green.shade700 : Colors.grey.shade700,
+                          ),
+                        ),
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
-                            onPressed: () {},
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                              );
+                              await _checkPair();
+                            },
                             icon: Icon(Icons.settings_outlined, color: Colors.grey.shade700),
                           ),
                         ),
@@ -180,7 +221,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // BOTÓN DE ESCANEO
+                  if (!isPaired)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      child: Material(
+                        color: const Color(0xFF126044).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          onTap: _openQrPair,
+                          borderRadius: BorderRadius.circular(14),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Row(
+                              children: [
+                                Icon(Icons.qr_code_scanner, color: Colors.green.shade800),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Conectar al sistema',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.green.shade900,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Escanea el QR de Conectar móvil',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.green.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.chevron_right, color: Colors.green.shade700),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
                   Expanded(
                     flex: documents.isEmpty ? 5 : 2,
                     child: Center(
@@ -241,7 +325,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Documentos • Recibos • Contratos • IDs',
+                            'Guías de cacao • PDF profesional',
                             style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
                           ),
                         ],
@@ -249,7 +333,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // LISTA
                   if (documents.isNotEmpty)
                     Expanded(
                       flex: 3,
