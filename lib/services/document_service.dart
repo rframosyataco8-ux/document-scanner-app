@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/scanned_document.dart';
 import 'api_config.dart';
+import 'local_db.dart';
 
 abstract class DocumentService {
   Future<List<ScannedDocument>> getAllDocuments();
@@ -18,52 +19,41 @@ abstract class DocumentService {
 }
 
 class LocalDocumentService implements DocumentService {
-  static const _storageKey = 'scanned_documents_v2';
+  final _db = LocalDb.instance;
+  bool _migrated = false;
 
-  Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
+  Future<void> _ensureMigrated() async {
+    if (_migrated) return;
+    await _db.migrateFromPrefsIfNeeded(() async {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getStringList('scanned_documents_v2') ??
+          prefs.getStringList('scanned_documents');
+    });
+    _migrated = true;
+  }
 
   @override
   Future<List<ScannedDocument>> getAllDocuments() async {
-    final prefs = await _prefs;
-    final raw = prefs.getStringList(_storageKey) ?? [];
-    if (raw.isEmpty) {
-      final legacy = prefs.getStringList('scanned_documents') ?? [];
-      if (legacy.isNotEmpty) {
-        await prefs.setStringList(_storageKey, legacy);
-        return legacy
-            .map((e) => ScannedDocument.fromJson(jsonDecode(e) as Map<String, dynamic>))
-            .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      }
-    }
-    return raw
-        .map((e) => ScannedDocument.fromJson(jsonDecode(e) as Map<String, dynamic>))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    await _ensureMigrated();
+    return _db.getAll();
   }
 
   @override
   Future<void> saveDocument(ScannedDocument document) async {
-    final docs = await getAllDocuments();
-    docs.insert(0, document);
-    await _persist(docs);
+    await _ensureMigrated();
+    await _db.upsert(document);
   }
 
   @override
   Future<void> deleteDocument(String id) async {
-    final docs = await getAllDocuments();
-    docs.removeWhere((d) => d.id == id);
-    await _persist(docs);
+    await _ensureMigrated();
+    await _db.delete(id);
   }
 
   @override
   Future<void> updateDocument(ScannedDocument document) async {
-    final docs = await getAllDocuments();
-    final index = docs.indexWhere((d) => d.id == document.id);
-    if (index != -1) {
-      docs[index] = document;
-      await _persist(docs);
-    }
+    await _ensureMigrated();
+    await _db.upsert(document);
   }
 
   bool _isNetworkError(Object e) {
@@ -85,6 +75,8 @@ class LocalDocumentService implements DocumentService {
     required Map<String, String> meta,
     bool enqueueOnNetworkError = true,
   }) async {
+    await _ensureMigrated();
+
     final token = await ApiConfig.getToken();
     if (token == null || token.isEmpty) {
       throw Exception('No hay sesión. Escanea el QR de "Conectar móvil" primero.');
@@ -166,7 +158,6 @@ class LocalDocumentService implements DocumentService {
         throw Exception(msg);
       }
 
-      // 409 conflicto = error de negocio, no reencolar
       final msg = body['error'] as String? ?? 'Error al subir la guía (${response.statusCode})';
       final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
       await updateDocument(failed);
@@ -196,12 +187,6 @@ class LocalDocumentService implements DocumentService {
       await updateDocument(failed);
       rethrow;
     }
-  }
-
-  Future<void> _persist(List<ScannedDocument> docs) async {
-    final prefs = await _prefs;
-    final raw = docs.map((d) => jsonEncode(d.toJson())).toList();
-    await prefs.setStringList(_storageKey, raw);
   }
 
   Map<String, dynamic> _tryJson(String raw) {

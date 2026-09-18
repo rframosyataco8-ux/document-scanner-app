@@ -7,17 +7,14 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
+import 'secure_store.dart';
 
-/// Handler en isolate de background (debe ser top-level).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Solo log; el sistema muestra la notificación automáticamente si viene
-  // con payload `notification`.
-  debugPrint('[FCM bg] ${message.messageId} ${message.notification?.title}');
+  debugPrint('[FCM bg] id=${message.messageId}');
 }
 
-/// Push FCM + registro del token en el backend RomEx.
-/// Si Firebase no está configurado (sin google-services.json), falla en silencio.
+/// Push FCM con almacenamiento seguro del token.
 class FcmService {
   FcmService._();
   static final FcmService instance = FcmService._();
@@ -28,9 +25,7 @@ class FcmService {
   final _local = FlutterLocalNotificationsPlugin();
   static const _channelId = 'romex_guias';
   static const _channelName = 'Guías RomEx';
-
   static const _prefsEnabled = 'fcm_enabled';
-  static const _prefsToken = 'fcm_token';
 
   Future<bool> init() async {
     try {
@@ -56,23 +51,28 @@ class FcmService {
       final messaging = FirebaseMessaging.instance;
       await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-      // Foreground
       FirebaseMessaging.onMessage.listen(_showForeground);
 
-      // Token refresh → re-registrar en backend
       messaging.onTokenRefresh.listen((token) async {
-        await _saveToken(token);
+        if (!SecureStore.isPlausibleFcmToken(token)) {
+          debugPrint('[FCM] token refresh inválido ignorado');
+          return;
+        }
+        await SecureStore.instance.saveFcmToken(token);
         await registerWithBackend();
       });
 
       final token = await messaging.getToken();
-      if (token != null) await _saveToken(token);
+      if (SecureStore.isPlausibleFcmToken(token)) {
+        await SecureStore.instance.saveFcmToken(token!);
+        debugPrint('[FCM] token ${SecureStore.maskToken(token)}');
+      }
 
       _ready = true;
       debugPrint('[FCM] listo');
       return true;
     } catch (e) {
-      debugPrint('[FCM] desactivado (configura Firebase): $e');
+      debugPrint('[FCM] desactivado: $e');
       _ready = false;
       return false;
     }
@@ -93,17 +93,9 @@ class FcmService {
     }
   }
 
-  Future<String?> getToken() async {
-    final p = await SharedPreferences.getInstance();
-    return p.getString(_prefsToken);
-  }
+  Future<String?> getToken() => SecureStore.instance.getFcmToken();
 
-  Future<void> _saveToken(String token) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_prefsToken, token);
-  }
-
-  /// Llama tras emparejar QR (cuando hay JWT).
+  /// Registra token en backend solo si es plausible y hay sesión.
   Future<void> registerWithBackend() async {
     if (!_ready) return;
     if (!await isEnabled()) return;
@@ -111,6 +103,11 @@ class FcmService {
     final auth = await ApiConfig.getToken();
     final fcmToken = await getToken();
     if (auth == null || fcmToken == null) return;
+
+    if (!SecureStore.isPlausibleFcmToken(fcmToken)) {
+      debugPrint('[FCM] registro abortado: token no plausible');
+      return;
+    }
 
     final base = await ApiConfig.getBaseUrl();
     try {
@@ -128,7 +125,9 @@ class FcmService {
             }),
           )
           .timeout(const Duration(seconds: 12));
-      debugPrint('[FCM] register status=${res.statusCode}');
+      debugPrint(
+        '[FCM] register status=${res.statusCode} token=${SecureStore.maskToken(fcmToken)}',
+      );
     } catch (e) {
       debugPrint('[FCM] register error: $e');
     }
@@ -153,6 +152,7 @@ class FcmService {
           )
           .timeout(const Duration(seconds: 10));
     } catch (_) {}
+    // No borramos el token local: se reutiliza al reactivar notificaciones.
   }
 
   void _showForeground(RemoteMessage message) {
