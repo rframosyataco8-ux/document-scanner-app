@@ -7,8 +7,10 @@ import 'package:uuid/uuid.dart';
 import '../models/scanned_document.dart';
 import '../services/api_config.dart';
 import '../services/document_service.dart';
+import '../services/network_monitor.dart';
 import '../services/upload_queue.dart';
 import '../theme/app_theme.dart';
+import '../widgets/network_status_bar.dart';
 import 'preview_screen.dart';
 import 'qr_pair_screen.dart';
 import 'settings_screen.dart';
@@ -32,6 +34,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   _Filter filter = _Filter.all;
   late AnimationController _pulseController;
   StreamSubscription<UploadQueueEvent>? _queueSub;
+  StreamSubscription<NetworkSnapshot>? _netSub;
+  bool _wasFullyOnline = true;
 
   @override
   void initState() {
@@ -56,6 +60,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         );
       }
+    });
+
+    _wasFullyOnline = NetworkMonitor.instance.current.fullyOnline;
+    _netSub = NetworkMonitor.instance.stream.listen((snap) {
+      if (!mounted) return;
+      // Aviso al perder o recuperar servidor
+      if (_wasFullyOnline && !snap.fullyOnline && snap.deviceOnline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Servidor no alcanzable — las subidas irán a cola offline'),
+            backgroundColor: Colors.orange.shade800,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else if (!_wasFullyOnline && snap.fullyOnline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Conexión restaurada con el sistema'),
+            backgroundColor: Colors.green.shade700,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      _wasFullyOnline = snap.fullyOnline;
     });
   }
 
@@ -93,7 +121,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       case _Filter.local:
         return documents
             .where((d) =>
-                d.status == DocumentStatus.local || d.status == DocumentStatus.uploading)
+                d.status == DocumentStatus.local ||
+                d.status == DocumentStatus.uploading)
             .toList();
       case _Filter.queued:
         return documents.where((d) => d.status == DocumentStatus.queued).toList();
@@ -109,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _queueSub?.cancel();
+    _netSub?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -200,72 +230,87 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return Scaffold(
       body: SafeArea(
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                color: RomexColors.primary,
-                onRefresh: () async {
-                  await UploadQueue.instance.processQueue();
-                  await _loadDocuments();
-                  await _checkPair();
-                },
-                child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(child: _buildHeader()),
-                    if (!isPaired) const SliverToBoxAdapter(child: _PairBanner()),
-                    if (queuedCount > 0)
-                      SliverToBoxAdapter(child: _QueueBanner(count: queuedCount)),
-                    SliverToBoxAdapter(child: _buildScanButton()),
-                    if (documents.isNotEmpty) ...[
-                      SliverToBoxAdapter(child: _buildFilters()),
-                      if (list.isEmpty)
-                        const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.all(32),
-                            child: Center(child: Text('No hay documentos en este filtro')),
-                          ),
-                        )
-                      else
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final doc = list[index];
-                                return _DocumentCard(
-                                  document: doc,
-                                  onTap: () => _openPreview(doc),
-                                );
-                              },
-                              childCount: list.length,
+        child: Column(
+          children: [
+            // Monitoreo de red en tiempo real
+            const NetworkStatusBar(),
+            Expanded(
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : RefreshIndicator(
+                      color: RomexColors.primary,
+                      onRefresh: () async {
+                        await NetworkMonitor.instance.refreshNow();
+                        await UploadQueue.instance.processQueue();
+                        await _loadDocuments();
+                        await _checkPair();
+                      },
+                      child: CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverToBoxAdapter(child: _buildHeader()),
+                          if (!isPaired)
+                            const SliverToBoxAdapter(child: _PairBanner()),
+                          if (queuedCount > 0)
+                            SliverToBoxAdapter(
+                                child: _QueueBanner(count: queuedCount)),
+                          SliverToBoxAdapter(child: _buildScanButton()),
+                          if (documents.isNotEmpty) ...[
+                            SliverToBoxAdapter(child: _buildFilters()),
+                            if (list.isEmpty)
+                              const SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: EdgeInsets.all(32),
+                                  child: Center(
+                                      child: Text(
+                                          'No hay documentos en este filtro')),
+                                ),
+                              )
+                            else
+                              SliverPadding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate(
+                                    (context, index) {
+                                      final doc = list[index];
+                                      return _DocumentCard(
+                                        document: doc,
+                                        onTap: () => _openPreview(doc),
+                                      );
+                                    },
+                                    childCount: list.length,
+                                  ),
+                                ),
+                              ),
+                          ] else
+                            const SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(24),
+                                  child: Text(
+                                    'Aún no hay documentos. Toca el botón para escanear una guía.',
+                                    textAlign: TextAlign.center,
+                                    style:
+                                        TextStyle(color: RomexColors.textMuted),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                    ] else
-                      const SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(24),
-                            child: Text(
-                              'Aún no hay documentos. Toca el botón para escanear una guía.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: RomexColors.textMuted),
-                            ),
-                          ),
-                        ),
+                        ],
                       ),
-                  ],
-                ),
-              ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 12, 8),
+      padding: const EdgeInsets.fromLTRB(24, 16, 12, 8),
       child: Row(
         children: [
           Expanded(
@@ -288,7 +333,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       : 'Escanea el QR para conectar',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isPaired ? RomexColors.primary : Colors.grey.shade500,
+                    color:
+                        isPaired ? RomexColors.primary : Colors.grey.shade500,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -325,7 +371,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         children: [
           ScaleTransition(
             scale: Tween(begin: 1.0, end: 1.05).animate(
-              CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+              CurvedAnimation(
+                  parent: _pulseController, curve: Curves.easeInOut),
             ),
             child: GestureDetector(
               onTap: isScanning ? null : startScan,
@@ -352,10 +399,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         child: SizedBox(
                           width: 40,
                           height: 40,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 3),
                         ),
                       )
-                    : const Icon(Icons.document_scanner_rounded, size: 58, color: Colors.white),
+                    : const Icon(Icons.document_scanner_rounded,
+                        size: 58, color: Colors.white),
               ),
             ),
           ),
@@ -396,7 +445,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: RomexColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -511,7 +561,8 @@ class _PairBanner extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                const Icon(Icons.qr_code_scanner, color: RomexColors.primaryDark),
+                const Icon(Icons.qr_code_scanner,
+                    color: RomexColors.primaryDark),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -526,7 +577,8 @@ class _PairBanner extends StatelessWidget {
                       ),
                       Text(
                         'Escanea el QR de Conectar móvil',
-                        style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.green.shade700),
                       ),
                     ],
                   ),
@@ -618,7 +670,8 @@ class _DocumentCard extends StatelessWidget {
                         ),
                       ),
                     )
-                  : Icon(Icons.picture_as_pdf_rounded, color: Colors.red.shade400, size: 30),
+                  : Icon(Icons.picture_as_pdf_rounded,
+                      color: Colors.red.shade400, size: 30),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -647,13 +700,15 @@ class _DocumentCard extends StatelessWidget {
                       Container(
                         width: 7,
                         height: 7,
-                        decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                            color: statusColor, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
                           (document.status == DocumentStatus.error ||
-                                      document.status == DocumentStatus.queued) &&
+                                      document.status ==
+                                          DocumentStatus.queued) &&
                                   document.lastError != null
                               ? document.lastError!
                               : statusText,
