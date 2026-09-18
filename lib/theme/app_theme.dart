@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Colores alineados al Sistema de Guías RomEx.
 class RomexColors {
   static const primary = Color(0xFF126044);
   static const primaryDark = Color(0xFF0B4936);
@@ -57,7 +56,7 @@ class AppTheme {
           borderSide: const BorderSide(color: RomexColors.primary, width: 1.5),
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         color: Colors.white,
         shape: RoundedRectangleBorder(
