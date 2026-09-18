@@ -13,6 +13,7 @@ abstract class DocumentService {
   Future<ScannedDocument> uploadToSystem(
     ScannedDocument document, {
     required Map<String, String> meta,
+    bool enqueueOnNetworkError = true,
   });
 }
 
@@ -25,7 +26,6 @@ class LocalDocumentService implements DocumentService {
   Future<List<ScannedDocument>> getAllDocuments() async {
     final prefs = await _prefs;
     final raw = prefs.getStringList(_storageKey) ?? [];
-    // Migración suave desde clave antigua
     if (raw.isEmpty) {
       final legacy = prefs.getStringList('scanned_documents') ?? [];
       if (legacy.isNotEmpty) {
@@ -66,10 +66,24 @@ class LocalDocumentService implements DocumentService {
     }
   }
 
+  bool _isNetworkError(Object e) {
+    final m = e.toString().toLowerCase();
+    return m.contains('socket') ||
+        m.contains('network') ||
+        m.contains('connection') ||
+        m.contains('timeout') ||
+        m.contains('failed host') ||
+        m.contains('unreachable') ||
+        m.contains('timed out') ||
+        m.contains('clientexception') ||
+        m.contains('handshake');
+  }
+
   @override
   Future<ScannedDocument> uploadToSystem(
     ScannedDocument document, {
     required Map<String, String> meta,
+    bool enqueueOnNetworkError = true,
   }) async {
     final token = await ApiConfig.getToken();
     if (token == null || token.isEmpty) {
@@ -88,7 +102,6 @@ class LocalDocumentService implements DocumentService {
       throw Exception('Número de guía, zona y fecha son obligatorios.');
     }
 
-    // Guardar meta localmente (para reintento)
     var working = document.copyWith(
       status: DocumentStatus.uploading,
       clearError: true,
@@ -139,6 +152,7 @@ class LocalDocumentService implements DocumentService {
           remoteId: remoteId,
           uploadedAt: DateTime.now(),
           clearError: true,
+          retryCount: 0,
         );
         await updateDocument(uploaded);
         return uploaded;
@@ -152,14 +166,33 @@ class LocalDocumentService implements DocumentService {
         throw Exception(msg);
       }
 
+      // 409 conflicto = error de negocio, no reencolar
       final msg = body['error'] as String? ?? 'Error al subir la guía (${response.statusCode})';
       final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
       await updateDocument(failed);
       throw Exception(msg);
     } catch (e) {
       if (e is Exception && e.toString().contains('Sesión expirada')) rethrow;
+
       final msg = e.toString().replaceFirst('Exception: ', '');
-      final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
+
+      if (enqueueOnNetworkError && _isNetworkError(e)) {
+        final queued = working.copyWith(
+          status: DocumentStatus.queued,
+          lastError: 'Sin red — en cola automática (intento ${working.retryCount + 1})',
+          retryCount: working.retryCount + 1,
+        );
+        await updateDocument(queued);
+        throw Exception(
+          'Sin conexión. La guía quedó en cola y se subirá automáticamente.',
+        );
+      }
+
+      final failed = working.copyWith(
+        status: DocumentStatus.error,
+        lastError: msg,
+        retryCount: working.retryCount + 1,
+      );
       await updateDocument(failed);
       rethrow;
     }
