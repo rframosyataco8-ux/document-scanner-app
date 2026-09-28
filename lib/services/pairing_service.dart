@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
-import 'fcm_service.dart';
 
 class PairingResult {
   final String token;
@@ -24,7 +23,8 @@ class PairingService {
     final text = raw.trim();
     if (text.isEmpty) return null;
 
-    final uriMatch = RegExp(r'/m/([A-Za-z0-9]{6,12})', caseSensitive: false).firstMatch(text);
+    final uriMatch =
+        RegExp(r'/m/([A-Za-z0-9]{6,12})', caseSensitive: false).firstMatch(text);
     if (uriMatch != null) {
       return uriMatch.group(1)!.toUpperCase();
     }
@@ -44,7 +44,10 @@ class PairingService {
     final response = await http
         .post(
           uri,
-          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
           body: jsonEncode({'code': code.toUpperCase()}),
         )
         .timeout(const Duration(seconds: 15));
@@ -58,10 +61,6 @@ class PairingService {
         throw PairingException('Respuesta inválida del servidor');
       }
       await ApiConfig.setSession(token: token, user: user);
-
-      // Registrar device para push FCM (si Firebase está activo)
-      await FcmService.instance.registerWithBackend();
-
       return PairingResult(token: token, user: user);
     }
 
@@ -69,13 +68,15 @@ class PairingService {
     throw PairingException(msg, statusCode: response.statusCode);
   }
 
+  /// Si el QR trae URL completa (http://IP:4000/m/CODIGO), guarda la base del API.
   static Future<void> maybeUpdateBaseUrlFromQr(String qrRaw) async {
     try {
       final uri = Uri.tryParse(qrRaw.trim());
       if (uri == null || !uri.hasScheme || uri.host.isEmpty) return;
       if (uri.scheme != 'http' && uri.scheme != 'https') return;
-      final base = '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
       if (uri.host == 'localhost' || uri.host == '127.0.0.1') return;
+      final base =
+          '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
       await ApiConfig.setBaseUrl(base);
     } catch (_) {}
   }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/home_screen.dart';
-import 'services/fcm_service.dart';
+import 'screens/splash_screen.dart';
 import 'services/network_monitor.dart';
 import 'services/upload_queue.dart';
 import 'theme/app_theme.dart';
@@ -15,12 +15,14 @@ Future<void> main() async {
     ),
   );
 
-  await FcmService.instance.init();
-  await UploadQueue.instance.start();
-  await NetworkMonitor.instance.start();
+  // Arranque en paralelo: no bloquea el splash
+  unawaited(UploadQueue.instance.start());
+  unawaited(NetworkMonitor.instance.start());
 
   runApp(const DocScanProApp());
 }
+
+void unawaited(Future<void> f) {}
 
 class DocScanProApp extends StatelessWidget {
   const DocScanProApp({super.key});
@@ -31,7 +33,7 @@ class DocScanProApp extends StatelessWidget {
       title: 'DocScan Pro · RomEx',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: const HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }

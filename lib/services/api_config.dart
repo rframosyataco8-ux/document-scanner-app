@@ -6,14 +6,13 @@ class ApiConfig {
   static const _keyBaseUrl = 'api_base_url';
   static const _keyPairedAt = 'paired_at';
   static const _keyLastZonas = 'last_zonas';
-  // Legacy keys (migración)
   static const _legacyToken = 'auth_token';
   static const _legacyUser = 'auth_user_json';
 
-  /// Emulador Android: http://10.0.2.2:3000
-  /// Celular real (misma Wi‑Fi): http://IP_DE_LA_PC:3000  (ej. http://192.168.1.45:3000)
-  /// Nunca uses localhost en el teléfono.
-  static const String defaultBaseUrl = 'http://10.0.2.2:3000';
+  /// Emulador Android → host de la PC: 10.0.2.2
+  /// Celular real → IP de la PC en la misma Wi‑Fi (ej. http://192.168.1.45:4000)
+  /// El backend del Sistema de Guías escucha en el puerto 4000.
+  static const String defaultBaseUrl = 'http://10.0.2.2:4000';
 
   static Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
@@ -29,11 +28,9 @@ class ApiConfig {
   }
 
   static Future<String?> getToken() async {
-    // Preferir secure storage
     final secure = await SecureStore.instance.getJwt();
     if (secure != null && secure.isNotEmpty) return secure;
 
-    // Migrar desde prefs si existía
     final p = await _prefs;
     final legacy = p.getString(_legacyToken);
     if (legacy != null && legacy.isNotEmpty) {
@@ -52,7 +49,6 @@ class ApiConfig {
     await SecureStore.instance.saveUserJson(jsonEncode(user));
     final p = await _prefs;
     await p.setString(_keyPairedAt, DateTime.now().toIso8601String());
-    // Limpiar legacy
     await p.remove(_legacyToken);
     await p.remove(_legacyUser);
   }
@@ -65,7 +61,6 @@ class ApiConfig {
         if (v is Map<String, dynamic>) return v;
       } catch (_) {}
     }
-    // Legacy
     final p = await _prefs;
     final legacy = p.getString(_legacyUser);
     if (legacy != null) {
