@@ -1,42 +1,44 @@
-# DocScan Pro · RomEx (v1.5.0)
+# DocScan Pro · RomEx (v1.5.1)
 
-App Flutter de escaneo de documentos conectada al **Sistema de Guías de Cacao**.
+App Flutter de escaneo conectada al **Sistema de Guías de Cacao**.
 
-- **ML Kit Document Scanner** (cámara nativa)
-- Emparejamiento por **QR** con la PC
-- Cola **offline** (SQLite)
-- **Sin Firebase** / sin notificaciones push
-- Splash animado + icono de marca
+- ML Kit Document Scanner
+- QR + JWT (sin Firebase)
+- Cola offline SQLite
+- Splash animado + icono Romex
 
-Va de la mano con el repo `sistema-guias-cacao` (backend puerto **4000**).
+## Prueba local (misma Wi‑Fi)
 
----
-
-## Arranque rápido
-
+### 1. Backend
 ```bash
-git pull origin main
-flutter clean
-flutter pub get
+cd sistema-guias-cacao/backend
+cp .env.example .env   # si aún no tienes .env
+npm install && npm run seed && npm run dev
+```
+Al arrancar verás algo como:
+```text
+Desde el celular: http://192.168.x.x:4000
+```
+
+### 2. Frontend (QR)
+```bash
+cd sistema-guias-cacao/frontend
+npm install && npm run dev
+```
+En **Conectar móvil**, escribe la base API LAN (`http://IP:4000`) y genera el QR.
+
+### 3. App
+```bash
+cd document-scanner-app
+git pull
+flutter clean && flutter pub get
+# Celular autorizado: adb devices → device
 flutter run
 ```
+Ajustes → misma URL `http://IP:4000` → Probar → Guardar → escanear QR.
 
-### Celular (importante)
-
-1. Depuración USB autorizada (`adb devices` → `device`, no `unauthorized`).
-2. En **Ajustes** de la app, URL del backend:
-   ```
-   http://IP_DE_LA_PC:4000
-   ```
-3. En la PC: Sistema de Guías → **Conectar móvil** → escanear QR.
-
-### Backend (sistema-guias-cacao)
-
-```bash
-cd backend && npm run dev   # http://localhost:4000
-cd frontend && npm run dev  # http://localhost:5173
-```
+## Producción (más adelante)
+URL `https://tu-dominio.com` · Nginx · Let’s Encrypt · JWT_SECRET fuerte.
 
 ---
-
 Exportadora Romex S.A.

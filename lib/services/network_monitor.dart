@@ -44,7 +44,7 @@ class NetworkSnapshot {
   }
 }
 
-/// Monitoreo continuo de conectividad del dispositivo + alcance del API.
+/// Monitoreo de red: ping al API cada 45s (ahorra batería/latencia).
 class NetworkMonitor {
   NetworkMonitor._();
   static final NetworkMonitor instance = NetworkMonitor._();
@@ -68,7 +68,6 @@ class NetworkMonitor {
     if (_started) return;
     _started = true;
 
-    // Estado inicial
     final initial = await Connectivity().checkConnectivity();
     await _onConnectivity(initial);
 
@@ -76,8 +75,7 @@ class NetworkMonitor {
       _onConnectivity(results);
     });
 
-    // Ping periódico al backend cada 20s cuando hay enlace
-    _pingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    _pingTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       if (_current.deviceOnline) unawaited(_pingServer());
     });
   }
@@ -115,14 +113,15 @@ class NetworkMonitor {
     _emit(NetworkSnapshot(
       deviceOnline: online,
       link: link,
-      server: online ? ServerReachability.unknown : ServerReachability.unreachable,
+      server: online
+          ? ServerReachability.unknown
+          : ServerReachability.unreachable,
       serverDetail: online ? 'Comprobando API…' : 'Sin conectividad',
       at: DateTime.now(),
     ));
 
     if (online) {
       await _pingServer();
-      // Si acabamos de recuperar red → procesar cola offline
       if (!wasOnline) {
         debugPrint('[NetMonitor] red recuperada → cola offline');
         unawaited(UploadQueue.instance.processQueue());
@@ -140,7 +139,6 @@ class NetworkMonitor {
       final candidates = [
         Uri.parse('$base/api/health'),
         Uri.parse('$base/health'),
-        Uri.parse('$base/api'),
       ];
 
       var ok = false;
@@ -149,22 +147,24 @@ class NetworkMonitor {
         try {
           final res = await http
               .get(u, headers: {'Accept': 'application/json'})
-              .timeout(const Duration(seconds: 5));
+              .timeout(const Duration(seconds: 4));
           if (res.statusCode >= 200 && res.statusCode < 500) {
             ok = true;
             detail = 'API ${res.statusCode}';
             break;
           }
           detail = 'HTTP ${res.statusCode}';
-        } catch (e) {
-          detail = 'timeout/error';
+        } catch (_) {
+          detail = 'sin respuesta';
         }
       }
 
       _emit(NetworkSnapshot(
         deviceOnline: _current.deviceOnline,
         link: _current.link,
-        server: ok ? ServerReachability.reachable : ServerReachability.unreachable,
+        server: ok
+            ? ServerReachability.reachable
+            : ServerReachability.unreachable,
         serverDetail: detail,
         at: DateTime.now(),
       ));
