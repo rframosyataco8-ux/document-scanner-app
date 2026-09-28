@@ -29,11 +29,10 @@ class UploadQueue {
           r == ConnectivityResult.mobile ||
           r == ConnectivityResult.ethernet);
       if (online) {
-        processQueue();
+        unawaited(processQueue());
       }
     });
 
-    // Primer intento al arrancar
     unawaited(processQueue());
   }
 
@@ -43,7 +42,6 @@ class UploadQueue {
     _started = false;
   }
 
-  /// Marca documento en cola (meta ya guardada).
   Future<ScannedDocument> enqueue(ScannedDocument doc) async {
     final queued = doc.copyWith(
       status: DocumentStatus.queued,
@@ -51,7 +49,8 @@ class UploadQueue {
       clearError: false,
     );
     await _service.updateDocument(queued);
-    _events.add(UploadQueueEvent(type: UploadQueueEventType.enqueued, document: queued));
+    _events.add(UploadQueueEvent(
+        type: UploadQueueEventType.enqueued, document: queued));
     unawaited(processQueue());
     return queued;
   }
@@ -76,7 +75,6 @@ class UploadQueue {
         if (!d.hasGuiaMeta) return false;
         if (d.pdfPath == null) return false;
         if (d.status == DocumentStatus.queued) return true;
-        // Reintento suave de errores de red
         if (d.status == DocumentStatus.error &&
             d.retryCount < maxRetries &&
             _looksLikeNetworkError(d.lastError)) {
@@ -94,7 +92,8 @@ class UploadQueue {
 
       for (final doc in pending) {
         try {
-          final result = await _service.uploadToSystem(doc, meta: doc.metaMap);
+          final result =
+              await _service.uploadToSystem(doc, meta: doc.metaMap);
           _events.add(UploadQueueEvent(
             type: UploadQueueEventType.success,
             document: result,
@@ -116,9 +115,14 @@ class UploadQueue {
             message: msg,
           ));
 
-          // Si es auth, no seguir con el resto
-          if (msg.contains('Sesión') || msg.contains('sesión')) break;
+          if (msg.toLowerCase().contains('sesión') ||
+              msg.toLowerCase().contains('sesion')) {
+            break;
+          }
         }
+
+        // Pausa breve entre subidas para no saturar el API
+        await Future<void>.delayed(const Duration(milliseconds: 400));
       }
     } finally {
       _processing = false;
@@ -135,8 +139,10 @@ class UploadQueue {
         m.contains('failed host') ||
         m.contains('unreachable') ||
         m.contains('timed out') ||
-        m.contains('cliente') ||
-        m.contains('red');
+        m.contains('clientexception') ||
+        m.contains('red') ||
+        m.contains('sin conexión') ||
+        m.contains('sin conexion');
   }
 }
 
