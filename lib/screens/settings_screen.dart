@@ -292,7 +292,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _sectionTitle('Acerca de'),
                 const SizedBox(height: 8),
                 Text(
-                  'DocScan Pro v1.3 · Exportadora Romex S.A. Cola offline + FCM + QR + ML Kit.',
+                  'DocScan Pro v1.4.1 · Exportadora Romex S.A. Cola offline + FCM + QR + ML Kit.',
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
                 ),
               ],
