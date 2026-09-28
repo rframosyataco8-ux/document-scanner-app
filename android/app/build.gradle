@@ -2,7 +2,7 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
-    // Descomenta cuando tengas google-services.json:
+    // Descomenta cuando tengas google-services.json en android/app/:
     // id "com.google.gms.google-services"
 }
 
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.document_scanner_app"
+        applicationId = "com.romex.docscanpro"
         minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -30,7 +30,9 @@ android {
 
     buildTypes {
         release {
+            // Firma debug solo para pruebas; para Play Store genera keystore propio
             signingConfig = signingConfigs.debug
+            minifyEnabled false
         }
     }
 }
