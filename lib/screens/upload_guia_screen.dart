@@ -80,7 +80,6 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validación de red + sesión antes de subir
     final netOk = await showNetworkValidation(
       context,
       requireAuth: true,
@@ -103,20 +102,26 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
     };
 
     try {
-      setState(() => _progress = 0.4);
+      setState(() => _progress = 0.45);
       final uploaded = await widget.documentService.uploadToSystem(
         widget.document,
         meta: meta,
       );
+      if (!mounted) return;
       setState(() => _progress = 1.0);
+      await Future<void>.delayed(const Duration(milliseconds: 180));
       if (!mounted) return;
       Navigator.pop(context, uploaded);
     } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
       setState(() {
         _uploading = false;
         _progress = 0;
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = msg;
       });
+      // Si quedó en cola, devolver el doc actualizado al cerrar no es obligatorio;
+      // el usuario ve el error y puede reintentar.
     }
   }
 
@@ -134,9 +139,10 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: RomexColors.primary.withOpacity(0.06),
+                color: RomexColors.primary.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: RomexColors.primary.withOpacity(0.15)),
+                border: Border.all(
+                    color: RomexColors.primary.withValues(alpha: 0.15)),
               ),
               child: Row(
                 children: [
@@ -154,7 +160,8 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
                         ),
                         Text(
                           '${widget.document.imagePaths.length} página(s)',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
                         ),
                       ],
                     ),
@@ -188,7 +195,8 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
                         icon: const Icon(Icons.arrow_drop_down),
                         onSelected: (z) => setState(() => _zona.text = z),
                         itemBuilder: (_) => _zonas
-                            .map((z) => PopupMenuItem(value: z, child: Text(z)))
+                            .map((z) =>
+                                PopupMenuItem(value: z, child: Text(z)))
                             .toList(),
                       ),
               ),
@@ -207,7 +215,7 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
                     label: Text(z, style: const TextStyle(fontSize: 12)),
                     selected: selected,
                     onSelected: (_) => setState(() => _zona.text = z),
-                    selectedColor: RomexColors.primary.withOpacity(0.2),
+                    selectedColor: RomexColors.primary.withValues(alpha: 0.2),
                   );
                 }).toList(),
               ),
@@ -241,7 +249,8 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _kilos,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
                     decoration: const InputDecoration(
                       labelText: 'Kilos',
                       prefixIcon: Icon(Icons.scale_outlined),
@@ -265,7 +274,8 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
                       Expanded(
                         child: Text(
                           _error!,
-                          style: TextStyle(color: Colors.red.shade800, fontSize: 13),
+                          style: TextStyle(
+                              color: Colors.red.shade800, fontSize: 13),
                         ),
                       ),
                     ],
@@ -295,7 +305,8 @@ class _UploadGuiaScreenState extends State<UploadGuiaScreen> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
                     )
                   : const Icon(Icons.cloud_upload_rounded),
               label: Text(_uploading ? 'Subiendo…' : 'Subir guía al sistema'),

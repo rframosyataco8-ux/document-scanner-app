@@ -3,34 +3,48 @@ import 'package:http/http.dart' as http;
 import 'api_config.dart';
 
 class ApiClient {
-  /// Comprueba si el backend responde.
+  /// Comprueba si el backend responde (timeout corto para UI ágil).
   static Future<HealthResult> healthCheck() async {
     final base = await ApiConfig.getBaseUrl();
     final candidates = [
       Uri.parse('$base/api/health'),
       Uri.parse('$base/health'),
-      Uri.parse('$base/api'),
     ];
 
+    Object? lastError;
     for (final uri in candidates) {
       try {
         final res = await http
             .get(uri, headers: {'Accept': 'application/json'})
-            .timeout(const Duration(seconds: 5));
+            .timeout(const Duration(seconds: 4));
         if (res.statusCode >= 200 && res.statusCode < 500) {
-          return HealthResult(ok: true, message: 'Servidor reachable ($base)', statusCode: res.statusCode);
+          String detail = 'OK';
+          try {
+            final body = jsonDecode(res.body);
+            if (body is Map && body['status'] != null) {
+              detail = 'status=${body['status']}';
+            }
+          } catch (_) {}
+          return HealthResult(
+            ok: true,
+            message: 'Servidor alcanzable · $base ($detail)',
+            statusCode: res.statusCode,
+          );
         }
-      } catch (_) {
-        // try next
+        lastError = 'HTTP ${res.statusCode}';
+      } catch (e) {
+        lastError = e;
       }
     }
     return HealthResult(
       ok: false,
-      message: 'No se pudo contactar $base. Revisa IP, puerto y Wi‑Fi.',
+      message:
+          'No se pudo contactar $base. Revisa IP, puerto 4000, Wi‑Fi y firewall. '
+          'Detalle: $lastError',
     );
   }
 
-  /// Intenta cargar zonas desde estructura de guías (si el token tiene permiso).
+  /// Zonas desde estructura de guías (cache local si falla).
   static Future<List<String>> fetchZonas() async {
     final token = await ApiConfig.getToken();
     if (token == null) return ApiConfig.getZonas();
@@ -45,7 +59,7 @@ class ApiClient {
               'Accept': 'application/json',
             },
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 8));
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
