@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'screens/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/network_monitor.dart';
 import 'services/upload_queue.dart';
@@ -15,14 +15,12 @@ Future<void> main() async {
     ),
   );
 
-  // Arranque en paralelo: no bloquea el splash
+  // Servicios en segundo plano: no bloquean el splash
   unawaited(UploadQueue.instance.start());
   unawaited(NetworkMonitor.instance.start());
 
   runApp(const DocScanProApp());
 }
-
-void unawaited(Future<void> f) {}
 
 class DocScanProApp extends StatelessWidget {
   const DocScanProApp({super.key});
