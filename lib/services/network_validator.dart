@@ -70,7 +70,8 @@ class NetworkValidator {
         detail: 'Ping al backend…',
         status: NetStepStatus.pending,
       ),
-      const NetStep(
+      // No puede ser const: depende de requireAuth en runtime
+      NetStep(
         id: 'auth',
         title: '5. Sesión QR',
         detail: requireAuth ? 'Verificando token…' : 'Opcional',
@@ -147,7 +148,7 @@ class NetworkValidator {
           summary: 'No se resolvió el host',
         );
       }
-      set(2, NetStepStatus.ok, '${addrs.first.address}');
+      set(2, NetStepStatus.ok, addrs.first.address);
     } catch (e) {
       set(2, NetStepStatus.fail, 'No se pudo resolver ${uri.host}');
       return NetworkValidationResult(
