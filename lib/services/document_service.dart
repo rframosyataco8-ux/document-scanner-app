@@ -66,7 +66,8 @@ class LocalDocumentService implements DocumentService {
         m.contains('unreachable') ||
         m.contains('timed out') ||
         m.contains('clientexception') ||
-        m.contains('handshake');
+        m.contains('handshake') ||
+        m.contains('software caused connection');
   }
 
   @override
@@ -79,7 +80,8 @@ class LocalDocumentService implements DocumentService {
 
     final token = await ApiConfig.getToken();
     if (token == null || token.isEmpty) {
-      throw Exception('No hay sesión. Escanea el QR de "Conectar móvil" primero.');
+      throw Exception(
+          'No hay sesión. Escanea el QR de "Conectar móvil" primero.');
     }
 
     final pdfPath = document.pdfPath;
@@ -112,6 +114,7 @@ class LocalDocumentService implements DocumentService {
     final request = http.MultipartRequest('POST', uri);
     request.headers['Authorization'] = 'Bearer $token';
     request.headers['Accept'] = 'application/json';
+    request.headers['Connection'] = 'keep-alive';
 
     request.fields['numero_guia'] = numero;
     request.fields['zona'] = zona;
@@ -123,21 +126,26 @@ class LocalDocumentService implements DocumentService {
       request.fields['kilos'] = meta['kilos']!.trim();
     }
 
+    final safeName =
+        'guia_${numero.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.pdf';
     request.files.add(await http.MultipartFile.fromPath(
       'archivo',
       pdfPath,
-      filename: 'guia_${numero.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}.pdf',
+      filename: safeName,
     ));
 
     try {
-      final streamed = await request.send().timeout(const Duration(seconds: 90));
-      final response = await http.Response.fromStream(streamed);
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 120));
+      final response = await http.Response.fromStream(streamed)
+          .timeout(const Duration(seconds: 30));
       final body = _tryJson(response.body);
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final guia = body['guia'] as Map<String, dynamic>?;
-        final remoteId =
-            guia != null ? '${guia['id']}' : 'OK-${DateTime.now().millisecondsSinceEpoch}';
+        final remoteId = guia != null
+            ? '${guia['id']}'
+            : 'OK-${DateTime.now().millisecondsSinceEpoch}';
 
         final uploaded = working.copyWith(
           status: DocumentStatus.uploaded,
@@ -150,27 +158,42 @@ class LocalDocumentService implements DocumentService {
         return uploaded;
       }
 
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        await ApiConfig.clearSession();
-        final msg = body['error'] as String? ?? 'Sesión expirada. Vuelve a escanear el QR.';
-        final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
+      if (response.statusCode == 409) {
+        final msg = body['error'] as String? ??
+            'Ya existe una guía con ese número en el sistema.';
+        final failed =
+            working.copyWith(status: DocumentStatus.error, lastError: msg);
         await updateDocument(failed);
         throw Exception(msg);
       }
 
-      final msg = body['error'] as String? ?? 'Error al subir la guía (${response.statusCode})';
-      final failed = working.copyWith(status: DocumentStatus.error, lastError: msg);
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await ApiConfig.clearSession();
+        final msg = body['error'] as String? ??
+            'Sesión expirada. Vuelve a escanear el QR.';
+        final failed =
+            working.copyWith(status: DocumentStatus.error, lastError: msg);
+        await updateDocument(failed);
+        throw Exception(msg);
+      }
+
+      final msg = body['error'] as String? ??
+          'Error al subir la guía (${response.statusCode})';
+      final failed =
+          working.copyWith(status: DocumentStatus.error, lastError: msg);
       await updateDocument(failed);
       throw Exception(msg);
     } catch (e) {
       if (e is Exception && e.toString().contains('Sesión expirada')) rethrow;
+      if (e is Exception && e.toString().contains('Ya existe')) rethrow;
 
       final msg = e.toString().replaceFirst('Exception: ', '');
 
       if (enqueueOnNetworkError && _isNetworkError(e)) {
         final queued = working.copyWith(
           status: DocumentStatus.queued,
-          lastError: 'Sin red — en cola automática (intento ${working.retryCount + 1})',
+          lastError:
+              'Sin red — en cola automática (intento ${working.retryCount + 1})',
           retryCount: working.retryCount + 1,
         );
         await updateDocument(queued);

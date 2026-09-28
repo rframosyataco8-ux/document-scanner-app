@@ -33,7 +33,7 @@ class _NetworkStatusBarState extends State<NetworkStatusBar> {
   Color get _bg {
     if (!_snap.deviceOnline) return Colors.red.shade50;
     if (_snap.server == ServerReachability.reachable) {
-      return RomexColors.primary.withOpacity(0.08);
+      return RomexColors.primary.withValues(alpha: 0.08);
     }
     if (_snap.server == ServerReachability.unknown) {
       return Colors.blue.shade50;
@@ -84,10 +84,11 @@ class _NetworkStatusBarState extends State<NetworkStatusBar> {
               if (_snap.serverDetail != null)
                 Text(
                   _snap.serverDetail!,
-                  style: TextStyle(fontSize: 11, color: _fg.withOpacity(0.75)),
+                  style: TextStyle(
+                      fontSize: 11, color: _fg.withValues(alpha: 0.75)),
                 ),
               const SizedBox(width: 6),
-              Icon(Icons.refresh, size: 16, color: _fg.withOpacity(0.7)),
+              Icon(Icons.refresh, size: 16, color: _fg.withValues(alpha: 0.7)),
             ],
           ),
         ),

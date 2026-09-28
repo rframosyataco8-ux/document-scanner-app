@@ -55,11 +55,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
       final go = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Sin sesion'),
-          content: const Text('Debes escanear el QR de Conectar movil antes de subir.'),
+          title: const Text('Sin sesión'),
+          content: const Text(
+              'Debes escanear el QR de Conectar móvil antes de subir.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Escanear QR')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Escanear QR')),
           ],
         ),
       );
@@ -78,12 +83,14 @@ class _PreviewScreenState extends State<PreviewScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Este documento no tiene PDF. Escanea de nuevo con formato PDF.'),
+          content: Text(
+              'Este documento no tiene PDF. Escanea de nuevo con formato PDF.'),
         ),
       );
       return;
     }
 
+    if (!mounted) return;
     final updated = await Navigator.push<ScannedDocument>(
       context,
       MaterialPageRoute(
@@ -97,23 +104,28 @@ class _PreviewScreenState extends State<PreviewScreen> {
     if (updated != null && mounted) {
       setState(() => document = updated);
       widget.onUpdated(updated);
+      final ok = updated.status == DocumentStatus.uploaded;
+      final queued = updated.status == DocumentStatus.queued;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            updated.status == DocumentStatus.uploaded
-                ? 'Guia subida al sistema'
-                : (updated.lastError ?? 'Revisa el estado'),
+            ok
+                ? 'Guía subida al sistema'
+                : queued
+                    ? 'Sin red — quedó en cola offline'
+                    : (updated.lastError ?? 'Revisa el estado'),
           ),
-          backgroundColor: updated.status == DocumentStatus.uploaded
+          backgroundColor: ok
               ? Colors.green.shade700
-              : Colors.red.shade700,
+              : queued
+                  ? Colors.orange.shade800
+                  : Colors.red.shade700,
         ),
       );
-    } else {
-      // Recargar por si se guardo meta/error en el servicio
+    } else if (mounted) {
       final all = await widget.documentService.getAllDocuments();
-      final fresh = all.where((d) => d.id == document.id).cast<ScannedDocument?>().firstWhere(
-            (d) => d != null,
+      final fresh = all.cast<ScannedDocument?>().firstWhere(
+            (d) => d?.id == document.id,
             orElse: () => null,
           );
       if (fresh != null && mounted) {
@@ -131,7 +143,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
         title: const Text('Eliminar documento'),
         content: const Text('¿Seguro que quieres eliminar este documento?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar')),
           TextButton(
             onPressed: () async {
               await widget.documentService.deleteDocument(document.id);
@@ -148,6 +162,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isUploaded = document.status == DocumentStatus.uploaded;
+    final isQueued = document.status == DocumentStatus.queued;
+    final isError = document.status == DocumentStatus.error;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -170,7 +188,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
           Expanded(
             child: document.imagePaths.isEmpty
                 ? const Center(
-                    child: Icon(Icons.picture_as_pdf_rounded, size: 90, color: Colors.white38),
+                    child: Icon(Icons.picture_as_pdf_rounded,
+                        size: 90, color: Colors.white38),
                   )
                 : PageView.builder(
                     itemCount: document.imagePaths.length,
@@ -182,6 +201,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
                           child: Image.file(
                             File(document.imagePaths[index]),
                             fit: BoxFit.contain,
+                            // Decode más liviano en pantallas típicas
+                            cacheWidth:
+                                (MediaQuery.of(context).size.width * 2)
+                                    .round()
+                                    .clamp(400, 1600),
                             errorBuilder: (_, __, ___) => const Icon(
                               Icons.broken_image_outlined,
                               color: Colors.white38,
@@ -193,11 +217,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     },
                   ),
           ),
-          if (document.lastError != null && document.status == DocumentStatus.error)
+          if (document.lastError != null && (isError || isQueued))
             Container(
               width: double.infinity,
-              color: Colors.red.shade900,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: isQueued ? Colors.orange.shade900 : Colors.red.shade900,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Text(
                 document.lastError!,
                 style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -215,23 +240,27 @@ class _PreviewScreenState extends State<PreviewScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Text(
-                      '${document.imagePaths.length} paginas',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                      '${document.imagePaths.length} páginas',
+                      style:
+                          TextStyle(color: Colors.grey.shade400, fontSize: 13),
                     ),
                   ),
-                if (document.status == DocumentStatus.uploaded)
+                if (isUploaded)
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.15),
+                      color: Colors.green.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_circle_rounded, color: Colors.green.shade400, size: 18),
+                        Icon(Icons.check_circle_rounded,
+                            color: Colors.green.shade400, size: 18),
                         const SizedBox(width: 8),
                         Text(
                           'En el sistema${document.remoteId != null ? ' · #${document.remoteId}' : ''}',
@@ -257,20 +286,20 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _ActionButton(
-                        icon: document.status == DocumentStatus.uploaded
+                        icon: isUploaded
                             ? Icons.cloud_done_rounded
-                            : document.status == DocumentStatus.error
+                            : isError || isQueued
                                 ? Icons.refresh_rounded
                                 : Icons.cloud_upload_rounded,
-                        label: document.status == DocumentStatus.uploaded
+                        label: isUploaded
                             ? 'Subido'
-                            : document.status == DocumentStatus.error
+                            : isError || isQueued
                                 ? 'Reintentar'
-                                : 'Subir guia',
-                        color: document.status == DocumentStatus.uploaded
+                                : 'Subir guía',
+                        color: isUploaded
                             ? Colors.green.shade400
                             : RomexColors.accent,
-                        onTap: _uploadToSystem,
+                        onTap: isUploaded ? () {} : _uploadToSystem,
                       ),
                     ),
                   ],
@@ -299,28 +328,32 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 26),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+    return Material(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 26),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
