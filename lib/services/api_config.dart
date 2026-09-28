@@ -10,6 +10,9 @@ class ApiConfig {
   static const _legacyToken = 'auth_token';
   static const _legacyUser = 'auth_user_json';
 
+  /// Emulador Android: http://10.0.2.2:3000
+  /// Celular real (misma Wi‑Fi): http://IP_DE_LA_PC:3000  (ej. http://192.168.1.45:3000)
+  /// Nunca uses localhost en el teléfono.
   static const String defaultBaseUrl = 'http://10.0.2.2:3000';
 
   static Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
