@@ -1,44 +1,60 @@
-# DocScan Pro · RomEx (v1.5.1)
+# DocScan Pro · RomEx (v1.5.4)
 
-App Flutter de escaneo conectada al **Sistema de Guías de Cacao**.
+App Flutter de escaneo de documentos conectada al **Sistema de Guías de Cacao**.
 
-- ML Kit Document Scanner
-- QR + JWT (sin Firebase)
-- Cola offline SQLite
+- ML Kit Document Scanner (cámara nativa)
+- Emparejamiento por **QR + JWT** (sin Firebase)
+- Cola **offline** (SQLite)
 - Splash animado + icono Romex
 
-## Prueba local (misma Wi‑Fi)
-
-### 1. Backend
-```bash
-cd sistema-guias-cacao/backend
-cp .env.example .env   # si aún no tienes .env
-npm install && npm run seed && npm run dev
-```
-Al arrancar verás algo como:
-```text
-Desde el celular: http://192.168.x.x:4000
-```
-
-### 2. Frontend (QR)
-```bash
-cd sistema-guias-cacao/frontend
-npm install && npm run dev
-```
-En **Conectar móvil**, escribe la base API LAN (`http://IP:4000`) y genera el QR.
-
-### 3. App
-```bash
-cd document-scanner-app
-git pull
-flutter clean && flutter pub get
-# Celular autorizado: adb devices → device
-flutter run
-```
-Ajustes → misma URL `http://IP:4000` → Probar → Guardar → escanear QR.
-
-## Producción (más adelante)
-URL `https://tu-dominio.com` · Nginx · Let’s Encrypt · JWT_SECRET fuerte.
+Va de la mano con: https://github.com/rframosyataco8-ux/sistema-guias-cacao
 
 ---
+
+## Requisitos
+
+- Flutter estable instalado (`flutter doctor`)
+- Celular Android con **Depuración USB**
+- Node.js 18+ (para el sistema de guías en la PC)
+- Misma Wi‑Fi PC + celular (solo en pruebas locales)
+
+---
+
+## Guía rápida (Git Bash en Windows)
+
+### 1. Clonar
+```bash
+cd ~
+git clone https://github.com/rframosyataco8-ux/document-scanner-app.git
+cd document-scanner-app
+```
+
+### 2. Dependencias
+```bash
+flutter pub get
+```
+
+### 3. Celular autorizado
+```bash
+export PATH="$PATH:/c/src/android-sdk/platform-tools"
+adb devices
+# Debe decir: XXXXXXXX    device  (no unauthorized)
+```
+
+### 4. Ejecutar
+```bash
+flutter run
+```
+
+### 5. Conectar al sistema de guías
+En la app → **Ajustes** → URL:
+```text
+http://IP_DE_TU_PC:4000
+```
+(ejemplo: `http://192.168.0.112:4000`) → **Probar** → **Guardar**.
+
+Luego en la web del sistema: **Conectar móvil** → generar QR → escanear en la app.
+
+---
+
 Exportadora Romex S.A.
